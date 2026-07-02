@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Forgot your Postly password? Enter your email and we'll send you a secure link to reset it and get back to managing your social channels.",
   alternates: { canonical: "/forgot-password" },
-  openGraph: { url: "/forgot-password" },
+  openGraph: { url: "/forgot-password", images: ["/opengraph-image"] },
   robots: { index: false, follow: true },
 };
 
