@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   description:
     "Start publishing everywhere in minutes. Join thousands of creators and teams growing with Postly — no credit card required.",
   alternates: { canonical: "/register" },
+  openGraph: { url: "/register" },
 };
 
 export default function RegisterPage() {

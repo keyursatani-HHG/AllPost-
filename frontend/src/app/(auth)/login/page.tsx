@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   description:
     "Log in to your Postly account to schedule posts, collaborate and track performance across every social channel.",
   alternates: { canonical: "/login" },
+  openGraph: { url: "/login" },
 };
 
 export default function LoginPage() {

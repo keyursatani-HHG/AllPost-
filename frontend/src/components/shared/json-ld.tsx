@@ -12,7 +12,7 @@ export function JsonLd() {
       "@id": `${siteConfig.url}/#organization`,
       name: siteConfig.company,
       url: siteConfig.url,
-      logo: `${siteConfig.url}/icon.png`,
+      logo: `${siteConfig.url}/icon.svg`,
       description: siteConfig.description,
       sameAs: Object.values(siteConfig.links),
       contactPoint: {

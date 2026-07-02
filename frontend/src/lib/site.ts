@@ -7,7 +7,7 @@ export const siteConfig = {
   shortName: "Postly",
   tagline: "Post to all platforms instantly",
   description:
-    "The all-in-one platform to create, schedule, and publish content everywhere your audience is. Manage every social account from one powerful, beautifully simple dashboard.",
+    "The all-in-one platform to create, schedule, and publish content everywhere your audience is — from one simple, powerful dashboard.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   ogImage: "/og.png",
   company: "Postly Inc.",

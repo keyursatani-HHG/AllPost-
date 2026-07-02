@@ -5,8 +5,10 @@ import { ForgotPasswordForm } from "@/components/forms/forgot-password-form";
 
 export const metadata: Metadata = {
   title: "Forgot password",
-  description: "Reset your Postly account password.",
+  description:
+    "Forgot your Postly password? Enter your email and we'll send you a secure link to reset it and get back to managing your social channels.",
   alternates: { canonical: "/forgot-password" },
+  openGraph: { url: "/forgot-password" },
   robots: { index: false, follow: true },
 };
 

@@ -4,7 +4,8 @@ import { siteConfig } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = siteConfig.url;
-  const routes = ["", "/login", "/register", "/forgot-password"];
+  // Only index-able pages belong in the sitemap (forgot-password is noindex).
+  const routes = ["", "/login", "/register"];
 
   return routes.map((route) => ({
     url: `${base}${route}`,
