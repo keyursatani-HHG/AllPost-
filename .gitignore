@@ -1,0 +1,22 @@
+# Dependencies / build output
+node_modules/
+.next/
+out/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Env & secrets
+.env
+.env*.local
+
+# Local databases
+*.db
+
+# OS
+.DS_Store
+
+# Design reference bundle (kept locally, not part of the app)
+design-handoff/
+*.zip

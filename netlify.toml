@@ -1,0 +1,13 @@
+# Netlify configuration — Postly Next.js frontend (monorepo).
+# The Next.js Runtime plugin handles SSR, middleware, image optimization, etc.
+
+[build]
+  base = "frontend"          # the Next.js app lives here
+  command = "npm run build"
+  publish = ".next"          # relative to `base` -> frontend/.next
+
+[build.environment]
+  NODE_VERSION = "20"        # Next.js 15 requires Node 18.18+ / 20+
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
