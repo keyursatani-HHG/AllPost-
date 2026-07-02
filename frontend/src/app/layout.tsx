@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 
 import "./globals.css";
 import { siteConfig } from "@/lib/site";
@@ -94,6 +95,13 @@ export default function RootLayout({
             <Toaster position="top-center" richColors />
           </AuthProvider>
         </ThemeProvider>
+
+        {/* Ahrefs Web Analytics */}
+        <Script
+          src="https://analytics.ahrefs.com/analytics.js"
+          data-key="PRAe3sEd3h/SVErFZSEFug"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
