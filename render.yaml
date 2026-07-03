@@ -1,7 +1,7 @@
-# Render Blueprint — Postly backend (FastAPI + PostgreSQL + Redis).
+# Render Blueprint — Postly backend (FastAPI + PostgreSQL).
 # Deploy: Render Dashboard -> New + -> Blueprint -> pick this repo.
-# Provisions the database, key-value store, and web service, then set the
-# `sync: false` env vars (marked below) in the Render UI.
+# After it applies, set FRONTEND_URL and BACKEND_CORS_ORIGINS in the Render UI.
+# (Redis is intentionally omitted — rate limiting degrades gracefully without it.)
 
 databases:
   - name: postly-db
@@ -10,21 +10,12 @@ databases:
     plan: free
 
 services:
-  # Redis-compatible key-value store (rate limiting / token deny-list).
-  # Optional — the app degrades gracefully without it.
-  - type: redis
-    name: postly-redis
-    plan: free
-    ipAllowList: [] # internal access only
-
   - type: web
     name: postly-api
     runtime: python
     rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
-    # init_db is idempotent (creates missing tables + seeds roles); swap for
-    # `alembic upgrade head` once you adopt migrations in production.
     startCommand: python -m app.db.init_db && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -32,27 +23,15 @@ services:
         fromDatabase:
           name: postly-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: postly-redis
-          property: connectionString
       - key: SECRET_KEY
-        generateValue: true # Render generates a strong secret
+        generateValue: true
       - key: ENVIRONMENT
         value: production
       - key: COOKIE_SECURE
         value: "true"
       - key: COOKIE_SAMESITE
-        value: none # cross-site cookie (Netlify frontend + Render backend)
-      # --- Set these in the Render UI after your Netlify site exists ---
+        value: none
       - key: FRONTEND_URL
-        sync: false # e.g. https://your-site.netlify.app
+        sync: false
       - key: BACKEND_CORS_ORIGINS
-        sync: false # e.g. https://your-site.netlify.app
-      - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: GOOGLE_REDIRECT_URI
-        sync: false # https://postly-api.onrender.com/api/v1/auth/google/callback
