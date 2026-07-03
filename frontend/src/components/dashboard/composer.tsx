@@ -110,23 +110,43 @@ export function Composer({ type, onBack }: { type: ComposerType; onBack: () => v
       }
       // 2. Create the post record.
       const post = await postsApi.create({ content, media_urls, hashtags: [] });
-      // 3. If posting/scheduling, queue it to the selected accounts.
-      if (kind === "post") {
+      // 3. Draft → done. Schedule → queue for later. Post now → real publish.
+      if (kind === "draft") {
+        toast.success("Saved to drafts", { description: "Find it under Posts → Drafts." });
+      } else if (scheduleOn) {
         await scheduleApi.schedule({
           post_id: post.id,
           social_account_ids: Array.from(selected),
-          scheduled_at: new Date(Date.now() + (scheduleOn ? 3600_000 : 0)).toISOString(),
+          scheduled_at: new Date(Date.now() + 3600_000).toISOString(),
         });
-      }
-      toast.success(
-        kind === "draft" ? "Saved to drafts" : scheduleOn ? "Scheduled" : "Queued to post",
-        {
-          description:
-            kind === "draft"
-              ? "Find it under Posts → Drafts."
-              : `${selected.size} account${selected.size > 1 ? "s" : ""} · see Posts → Scheduled.`,
+        toast.success("Scheduled", {
+          description: `${selected.size} account${selected.size > 1 ? "s" : ""} · see Posts → Scheduled.`,
+        });
+      } else {
+        const { results } = await scheduleApi.publish({
+          post_id: post.id,
+          social_account_ids: Array.from(selected),
+        });
+        const published = results.filter((r) => r.status === "published");
+        const failed = results.filter((r) => r.status === "failed");
+        if (published.length > 0) {
+          const url = published[0].url;
+          toast.success(`Posted live to ${published.length} account${published.length > 1 ? "s" : ""} 🎉`, {
+            description: url ? "It's live on Bluesky." : undefined,
+            action: url ? { label: "View", onClick: () => window.open(url, "_blank") } : undefined,
+          });
         }
-      );
+        if (failed.length > 0) {
+          toast.error(`${failed.length} account${failed.length > 1 ? "s" : ""} failed`, {
+            description: failed[0].error,
+          });
+        }
+        if (published.length === 0 && failed.length === 0) {
+          toast.info("Queued", {
+            description: "Live publishing isn't wired for the selected platform yet.",
+          });
+        }
+      }
       onBack();
     } catch (e) {
       toast.error("Couldn't save", {

@@ -1,19 +1,28 @@
 """Social account connections and post scheduling."""
 from __future__ import annotations
 
+import pathlib
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import errors
-from app.models.enums import PostStatus, ScheduleStatus
+from app.models.enums import PostStatus, ScheduleStatus, SocialPlatform
 from app.models.post import Post
 from app.models.scheduled_post import ScheduledPost
 from app.models.social_account import SocialAccount
 from app.models.user import User
 from app.schemas.common import PaginationParams
 from app.schemas.schedule import ScheduleCreate, SocialAccountConnect
+from app.services import bluesky
+
+UPLOAD_DIR = pathlib.Path("uploads")
+_MIME = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".webp": "image/webp", ".gif": "image/gif",
+}
 
 
 # --- Social accounts ------------------------------------------------------- #
@@ -130,3 +139,106 @@ async def cancel_scheduled(
     await db.commit()
     await db.refresh(sp)
     return sp
+
+
+# --- Bluesky (real integration) ------------------------------------------- #
+async def connect_bluesky(
+    db: AsyncSession, user: User, identifier: str, app_password: str
+) -> SocialAccount:
+    """Validate the app password against Bluesky, then save/update the account."""
+    session = await bluesky.create_session(identifier, app_password)
+    did = session["did"]
+    handle = session["handle"]
+
+    result = await db.execute(
+        select(SocialAccount).where(
+            SocialAccount.user_id == user.id,
+            SocialAccount.platform == SocialPlatform.bluesky,
+            SocialAccount.external_id == did,
+        )
+    )
+    acc = result.scalar_one_or_none()
+    if acc is not None:
+        acc.access_token = app_password
+        acc.handle = handle
+        acc.display_name = handle
+        acc.is_active = True
+    else:
+        acc = SocialAccount(
+            user_id=user.id,
+            platform=SocialPlatform.bluesky,
+            external_id=did,
+            handle=handle,
+            display_name=handle,
+            access_token=app_password,  # encrypt at rest in production
+        )
+        db.add(acc)
+    await db.commit()
+    await db.refresh(acc)
+    return acc
+
+
+async def publish_now(
+    db: AsyncSession, user: User, post_id: uuid.UUID, account_ids: list[uuid.UUID]
+) -> list[dict]:
+    """Publish a post to the selected accounts immediately (real send for Bluesky)."""
+    post = await db.get(Post, post_id)
+    if post is None or post.user_id != user.id:
+        raise errors.not_found("Post not found")
+
+    result = await db.execute(
+        select(SocialAccount).where(
+            SocialAccount.id.in_(account_ids), SocialAccount.user_id == user.id
+        )
+    )
+    accounts = list(result.scalars().all())
+    if not accounts:
+        raise errors.bad_request("No valid accounts selected", "invalid_accounts")
+
+    # Load media bytes from disk for platforms that accept media uploads.
+    images: list[tuple[bytes, str]] = []
+    for url in post.media_urls or []:
+        path = UPLOAD_DIR / pathlib.Path(url).name
+        mime = _MIME.get(path.suffix.lower())
+        if mime and path.exists():
+            images.append((path.read_bytes(), mime))
+
+    outcomes: list[dict] = []
+    published_any = False
+    for acc in accounts:
+        sp = ScheduledPost(
+            post_id=post.id,
+            social_account_id=acc.id,
+            scheduled_at=datetime.now(timezone.utc),
+        )
+        if acc.platform == SocialPlatform.bluesky and acc.access_token:
+            try:
+                uri = await bluesky.publish(acc.handle, acc.access_token, post.content, images)
+                sp.status = ScheduleStatus.published
+                sp.published_at = datetime.now(timezone.utc)
+                sp.external_post_id = uri
+                published_any = True
+                outcomes.append({
+                    "account_id": acc.id, "platform": "bluesky",
+                    "status": "published", "url": bluesky.post_url(uri, acc.handle),
+                })
+            except Exception as exc:  # noqa: BLE001 - report per-account
+                detail = getattr(exc, "detail", str(exc))
+                sp.status = ScheduleStatus.failed
+                sp.error_message = str(detail)[:500]
+                outcomes.append({
+                    "account_id": acc.id, "platform": "bluesky",
+                    "status": "failed", "error": str(detail),
+                })
+        else:
+            sp.status = ScheduleStatus.queued
+            outcomes.append({
+                "account_id": acc.id, "platform": acc.platform.value,
+                "status": "queued",
+                "error": "Live publishing isn't wired for this platform yet.",
+            })
+        db.add(sp)
+
+    post.status = PostStatus.published if published_any else PostStatus.scheduled
+    await db.commit()
+    return outcomes

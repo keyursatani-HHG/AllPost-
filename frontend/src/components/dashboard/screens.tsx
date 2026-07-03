@@ -405,13 +405,34 @@ const CONNECT_PLATFORMS = [
 function ConnectionsScreen() {
   const [accounts, setAccounts] = React.useState<SocialAccount[]>([]);
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [bsky, setBsky] = React.useState({ open: false, id: "", pw: "", loading: false });
 
   const load = React.useCallback(() => {
     scheduleApi.accounts().then(setAccounts).catch(() => setAccounts([]));
   }, []);
   React.useEffect(() => load(), [load]);
 
+  async function submitBluesky() {
+    if (!bsky.id.trim() || !bsky.pw.trim()) return;
+    setBsky((s) => ({ ...s, loading: true }));
+    try {
+      await scheduleApi.connectBluesky({ identifier: bsky.id.trim(), app_password: bsky.pw.trim() });
+      toast.success("Bluesky connected", { description: "You can now post to it from the composer." });
+      setBsky({ open: false, id: "", pw: "", loading: false });
+      load();
+    } catch (e) {
+      toast.error("Couldn't connect Bluesky", {
+        description: e instanceof ApiError ? e.message : "Check your handle and app password.",
+      });
+      setBsky((s) => ({ ...s, loading: false }));
+    }
+  }
+
   async function connect(platform: string, name: string) {
+    if (platform === "bluesky") {
+      setBsky({ open: true, id: "", pw: "", loading: false });
+      return;
+    }
     const handle = window.prompt(`Enter the @handle to connect for ${name}:`)?.trim();
     if (!handle) return;
     setBusy(platform);
@@ -438,6 +459,57 @@ function ConnectionsScreen() {
   return (
     <div>
       <h1 className={`${h1} mb-6`}>Connected Accounts</h1>
+
+      {bsky.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setBsky((s) => ({ ...s, open: false }))}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center gap-2.5">
+              <span className="grid size-9 place-items-center rounded-lg" style={{ background: "#1185FE" }}>
+                <PlatformGlyph code="bs" size={18} color="#fff" />
+              </span>
+              <span className="text-[18px] font-extrabold text-[#0F172A]">Connect Bluesky</span>
+            </div>
+            <p className="mb-4 text-[13px] leading-relaxed text-[#64748B]">
+              Create an <span className="font-semibold text-[#334155]">app password</span> in Bluesky
+              (Settings → Privacy &amp; Security → App Passwords), then paste it here.
+            </p>
+            <label className="mb-1 block text-[13px] font-semibold text-[#334155]">Handle or email</label>
+            <input
+              value={bsky.id}
+              onChange={(e) => setBsky((s) => ({ ...s, id: e.target.value }))}
+              placeholder="yourname.bsky.social"
+              className="mb-3 w-full rounded-[10px] border border-[#E2E8F0] px-3.5 py-2.5 text-[14px] outline-none focus:border-[#22C55E]"
+            />
+            <label className="mb-1 block text-[13px] font-semibold text-[#334155]">App password</label>
+            <input
+              type="password"
+              value={bsky.pw}
+              onChange={(e) => setBsky((s) => ({ ...s, pw: e.target.value }))}
+              placeholder="xxxx-xxxx-xxxx-xxxx"
+              className="mb-5 w-full rounded-[10px] border border-[#E2E8F0] px-3.5 py-2.5 text-[14px] outline-none focus:border-[#22C55E]"
+            />
+            <div className="flex justify-end gap-2.5">
+              <button
+                onClick={() => setBsky((s) => ({ ...s, open: false }))}
+                className="rounded-[10px] border border-[#E5E7EB] bg-white px-4 py-2.5 text-[14px] font-semibold text-[#64748B]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitBluesky}
+                disabled={bsky.loading}
+                className="rounded-[10px] bg-brand-gradient px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-60"
+              >
+                {bsky.loading ? "Connecting…" : "Connect"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className={`px-7 py-[26px] ${card}`}>
         <div className="flex flex-col gap-3.5">
           {CONNECT_PLATFORMS.map((p) => {

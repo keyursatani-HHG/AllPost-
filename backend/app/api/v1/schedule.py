@@ -10,6 +10,9 @@ from app.api.deps import CurrentUser, DbSession, Pagination
 from app.models.enums import ScheduleStatus
 from app.schemas.common import Page, PageMeta
 from app.schemas.schedule import (
+    BlueskyConnect,
+    PublishRequest,
+    PublishResponse,
     ScheduleCreate,
     ScheduledPostRead,
     SocialAccountConnect,
@@ -37,6 +40,21 @@ async def connect_account(
     data: SocialAccountConnect, current_user: CurrentUser, db: DbSession
 ) -> SocialAccountRead:
     account = await schedule_service.connect_account(db, current_user, data)
+    return SocialAccountRead.model_validate(account)
+
+
+@router.post(
+    "/accounts/bluesky",
+    response_model=SocialAccountRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Connect a Bluesky account (handle + app password)",
+)
+async def connect_bluesky(
+    data: BlueskyConnect, current_user: CurrentUser, db: DbSession
+) -> SocialAccountRead:
+    account = await schedule_service.connect_bluesky(
+        db, current_user, data.identifier, data.app_password
+    )
     return SocialAccountRead.model_validate(account)
 
 
@@ -85,6 +103,20 @@ async def create_schedule(
 ) -> list[ScheduledPostRead]:
     created = await schedule_service.create_schedule(db, current_user, data)
     return [ScheduledPostRead.model_validate(s) for s in created]
+
+
+@router.post(
+    "/publish",
+    response_model=PublishResponse,
+    summary="Publish a post now to selected accounts (real send for Bluesky)",
+)
+async def publish_now(
+    data: PublishRequest, current_user: CurrentUser, db: DbSession
+) -> PublishResponse:
+    results = await schedule_service.publish_now(
+        db, current_user, data.post_id, data.social_account_ids
+    )
+    return PublishResponse(results=results)
 
 
 @router.post(

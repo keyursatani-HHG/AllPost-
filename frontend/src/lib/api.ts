@@ -205,6 +205,18 @@ export const scheduleApi = {
     social_account_ids: string[];
     scheduled_at: string;
   }) => request("/schedule", { method: "POST", body: input }),
+  connectBluesky: (input: { identifier: string; app_password: string }) =>
+    request<SocialAccount>("/schedule/accounts/bluesky", { method: "POST", body: input }),
+  publish: (input: { post_id: string; social_account_ids: string[] }) =>
+    request<{
+      results: {
+        account_id: string;
+        platform: string;
+        status: string;
+        url?: string;
+        error?: string;
+      }[];
+    }>("/schedule/publish", { method: "POST", body: input }),
 };
 
 export const mediaApi = {

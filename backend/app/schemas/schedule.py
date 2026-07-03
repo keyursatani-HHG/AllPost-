@@ -52,3 +52,25 @@ class ScheduledPostRead(BaseModel):
     external_post_id: str | None = None
     error_message: str | None = None
     created_at: datetime
+
+
+class BlueskyConnect(BaseModel):
+    identifier: str = Field(min_length=1, max_length=253)  # handle or email
+    app_password: str = Field(min_length=1, max_length=128)
+
+
+class PublishRequest(BaseModel):
+    post_id: uuid.UUID
+    social_account_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class PublishResult(BaseModel):
+    account_id: uuid.UUID
+    platform: str
+    status: str  # published | queued | failed
+    url: str | None = None
+    error: str | None = None
+
+
+class PublishResponse(BaseModel):
+    results: list[PublishResult]
