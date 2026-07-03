@@ -32,3 +32,37 @@ export interface ApiErrorBody {
     | { msg: string; type?: string; loc?: (string | number)[] }[];
   code?: string;
 }
+
+export interface SocialAccount {
+  id: string;
+  platform: string;
+  handle: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export type PostStatus =
+  | "draft"
+  | "scheduled"
+  | "publishing"
+  | "published"
+  | "failed"
+  | "archived";
+
+export interface Post {
+  id: string;
+  user_id: string;
+  content: string;
+  media_urls: string[];
+  hashtags: string[];
+  status: PostStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Page<T> {
+  items: T[];
+  meta: { page: number; page_size: number; total: number; total_pages: number };
+}

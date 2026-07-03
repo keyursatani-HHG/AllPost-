@@ -7,12 +7,14 @@ import { Menu } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { DashboardSidebar, type ScreenKey } from "@/components/dashboard/sidebar";
 import { DashboardScreen } from "@/components/dashboard/screens";
+import { Composer, type ComposerType } from "@/components/dashboard/composer";
 
 export default function DashboardPage() {
   const { user, status, logout } = useAuth();
   const router = useRouter();
   const [active, setActive] = React.useState<ScreenKey>("create");
   const [drawer, setDrawer] = React.useState(false);
+  const [composer, setComposer] = React.useState<ComposerType | null>(null);
 
   // Protected route: send unauthenticated visitors to login once auth resolves.
   React.useEffect(() => {
@@ -22,6 +24,7 @@ export default function DashboardPage() {
   const navigate = React.useCallback((k: ScreenKey) => {
     setActive(k);
     setDrawer(false);
+    setComposer(null);
   }, []);
 
   // While the session is resolving (or redirecting), show a lightweight loader.
@@ -88,7 +91,16 @@ export default function DashboardPage() {
         </div>
 
         <div className="mx-auto max-w-[1520px] px-6 py-8 lg:px-11 lg:py-[38px]">
-          <DashboardScreen active={active} user={displayUser} onNavigate={navigate} />
+          {composer ? (
+            <Composer type={composer} onBack={() => setComposer(null)} />
+          ) : (
+            <DashboardScreen
+              active={active}
+              user={displayUser}
+              onNavigate={navigate}
+              onCompose={setComposer}
+            />
+          )}
         </div>
       </main>
     </div>

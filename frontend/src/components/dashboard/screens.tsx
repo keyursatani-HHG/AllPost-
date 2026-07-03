@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   Activity,
   AlignLeft,
@@ -20,8 +21,11 @@ import {
   Video,
 } from "lucide-react";
 
+import { postsApi } from "@/lib/api";
+import type { Post, PostStatus } from "@/types";
 import { PlatformGlyph, PlatformRow } from "@/components/dashboard/icons";
 import type { ScreenKey } from "@/components/dashboard/sidebar";
+import type { ComposerType } from "@/components/dashboard/composer";
 
 type User = { name: string; email: string };
 
@@ -31,12 +35,18 @@ const card = "rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_1px_3px_rgb
 /* -------------------------------------------------------------------------- */
 /*  Create                                                                     */
 /* -------------------------------------------------------------------------- */
-function CreateScreen({ onNavigate }: { onNavigate: (k: ScreenKey) => void }) {
-  const tiles = [
-    { title: "Text Post", Icon: AlignLeft, codes: ["fb", "bs", "li", "th", "tw", "gb"] },
-    { title: "Image Post", Icon: ImageIcon, codes: ["fb", "bs", "li", "th", "tw", "ig", "pin", "tt", "gb"] },
-    { title: "Video Post", Icon: Video, codes: ["fb", "bs", "li", "th", "tw", "ig", "pin", "tt", "yt", "gb"] },
-    { title: "Story Post", Icon: Camera, codes: ["fb", "ig"] },
+function CreateScreen({
+  onCompose,
+  onNavigate,
+}: {
+  onCompose: (t: ComposerType) => void;
+  onNavigate: (k: ScreenKey) => void;
+}) {
+  const tiles: { title: string; Icon: typeof AlignLeft; codes: string[]; type: ComposerType }[] = [
+    { title: "Text Post", Icon: AlignLeft, codes: ["fb", "bs", "li", "th", "tw", "gb"], type: "text" },
+    { title: "Image Post", Icon: ImageIcon, codes: ["fb", "bs", "li", "th", "tw", "ig", "pin", "tt", "gb"], type: "image" },
+    { title: "Video Post", Icon: Video, codes: ["fb", "bs", "li", "th", "tw", "ig", "pin", "tt", "yt", "gb"], type: "video" },
+    { title: "Story Post", Icon: Camera, codes: ["fb", "ig"], type: "story" },
   ];
   return (
     <div>
@@ -45,7 +55,7 @@ function CreateScreen({ onNavigate }: { onNavigate: (k: ScreenKey) => void }) {
         {tiles.map((t) => (
           <button
             key={t.title}
-            onClick={() => onNavigate("studio")}
+            onClick={() => onCompose(t.type)}
             className="create-tile flex flex-col items-center rounded-[18px] border border-[#E5E7EB] bg-white px-6 pb-6 pt-10 text-center shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all"
           >
             <span className="mb-[22px] grid size-[74px] place-items-center rounded-[18px] border border-[#EEF2F6] bg-[#F8FAFC] text-[#94A3B8]">
@@ -233,90 +243,99 @@ function CalendarScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Posts list (all / posted)                                                  */
+/*  Posts list (all / posted / scheduled / drafts) — real data                 */
 /* -------------------------------------------------------------------------- */
-function Avatars({ items }: { items: { t: string; bg: string }[] }) {
-  return (
-    <div className="flex items-center">
-      {items.map((a, i) => (
-        <span
-          key={i}
-          className="grid size-[26px] place-items-center rounded-full border-2 border-white text-[10px] font-bold text-white"
-          style={{ background: a.bg, marginLeft: i ? -8 : 0 }}
-        >
-          {a.t}
-        </span>
-      ))}
-    </div>
-  );
-}
+const STATUS_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  draft: { label: "draft", bg: "#F1F5F9", color: "#64748B" },
+  scheduled: { label: "scheduled", bg: "#DBEAFE", color: "#2563EB" },
+  publishing: { label: "publishing", bg: "#FEF3C7", color: "#B45309" },
+  published: { label: "posted", bg: "#22C55E", color: "#ffffff" },
+  failed: { label: "failed", bg: "#FEE2E2", color: "#DC2626" },
+  archived: { label: "archived", bg: "#F1F5F9", color: "#94A3B8" },
+};
 
-function PostsScreen({ title }: { title: string }) {
-  const filters = ["All Platforms", "All Types", "All Status", "Newest", "Search"];
-  const posts = [
-    {
-      date: "2/7/2026", time: "2:30 pm", kind: "🖼 image",
-      text: "🚨 JUST IN: JAPAN'S METAPLANET NOW HOLDS 43,000 BITCOIN AFTER $221M BTC BUYING SPREE. Metaplanet added 2,823 BTC for roughly $221 MILLION in Q2, bringing total holdings to 43,000 BTC.",
-      avatars: [{ t: "IG", bg: "#E1306C" }, { t: "H", bg: "#EC4899" }, { t: "X", bg: "#0F172A" }],
-    },
-    {
-      date: "2/7/2026", time: "2:20 pm", kind: "✎ text",
-      text: "🚨 JUST IN: OPENAI OFFERS US GOVERNMENT A 5% STAKE WORTH $42.6 BILLION based on its reported $852B valuation.",
-      avatars: [{ t: "in", bg: "#EC4899" }, { t: "X", bg: "#0F172A" }],
-    },
-  ];
+function PostsListScreen({
+  title,
+  status,
+  emptyTitle,
+  emptySub,
+  onNavigate,
+}: {
+  title: string;
+  status?: PostStatus;
+  emptyTitle: string;
+  emptySub: string;
+  onNavigate: (k: ScreenKey) => void;
+}) {
+  const [posts, setPosts] = React.useState<Post[] | null>(null);
+
+  const load = React.useCallback(() => {
+    setPosts(null);
+    postsApi
+      .list(status)
+      .then((r) => setPosts(r.items))
+      .catch(() => setPosts([]));
+  }, [status]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  if (posts === null) {
+    return (
+      <div>
+        <h1 className={`${h1} mb-5`}>{title}</h1>
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <div className="h-1 w-40 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full w-1/2 animate-marquee rounded-full bg-brand-gradient" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (posts.length === 0) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+        <h2 className="mb-3.5 text-[44px] font-extrabold leading-[1.05] tracking-[-0.03em] text-[#0F172A]">{emptyTitle}</h2>
+        <p className="mb-[26px] text-[16px] text-[#64748B]">{emptySub}</p>
+        <button
+          onClick={() => onNavigate("create")}
+          className="db-btn rounded-[11px] bg-brand-gradient px-[26px] py-[13px] text-[15px] font-bold text-white"
+          style={{ boxShadow: "0 10px 22px rgba(34,197,94,0.28)" }}
+        >
+          Create Post
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-5 flex items-center justify-between">
         <h1 className={h1}>{title}</h1>
-        <button className="grid size-9 place-items-center rounded-[9px] border border-[#E5E7EB] bg-white text-[#64748B]">
+        <button onClick={load} className="grid size-9 place-items-center rounded-[9px] border border-[#E5E7EB] bg-white text-[#64748B]">
           <RefreshCw className="size-4" strokeWidth={2} />
         </button>
       </div>
-      <div className="mb-[22px] flex flex-wrap gap-2.5">
-        {filters.map((f) => (
-          <button key={f} className="rounded-[9px] border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#334155]">
-            {f} ▾
-          </button>
-        ))}
-      </div>
       <div className="grid grid-cols-1 gap-[22px] lg:grid-cols-2">
-        {posts.map((p, i) => (
-          <div key={i} className={`p-5 ${card}`}>
-            <div className="mb-2.5 flex items-center justify-between text-[13px] text-[#94A3B8]">
-              <span>{p.date}</span>
-              <span>{p.time}</span>
+        {posts.map((p) => {
+          const b = STATUS_BADGE[p.status] ?? STATUS_BADGE.draft;
+          return (
+            <div key={p.id} className={`p-5 ${card}`}>
+              <div className="mb-2.5 text-[13px] text-[#94A3B8]">
+                {new Date(p.created_at).toLocaleString()}
+              </div>
+              <p className="mb-[18px] line-clamp-3 text-[14px] leading-relaxed text-[#1E293B]">{p.content}</p>
+              <div className="flex items-center justify-end">
+                <span className="rounded-lg px-3 py-[5px] text-[12px] font-bold" style={{ background: b.bg, color: b.color }}>
+                  {b.label}
+                </span>
+              </div>
             </div>
-            <span className="mb-3 inline-flex items-center gap-1.5 rounded-md bg-[#F1F5F9] px-2 py-[3px] text-[11px] font-bold text-[#64748B]">
-              {p.kind}
-            </span>
-            <p className="mb-[18px] line-clamp-3 text-[14px] leading-relaxed text-[#1E293B]">{p.text}</p>
-            <div className="flex items-center justify-between">
-              <Avatars items={p.avatars} />
-              <span className="rounded-lg bg-[#22C55E] px-3 py-[5px] text-[12px] font-bold text-white">posted</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Empty (scheduled / drafts)                                                 */
-/* -------------------------------------------------------------------------- */
-function EmptyScreen({ title, sub, onNavigate }: { title: string; sub: string; onNavigate: (k: ScreenKey) => void }) {
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <h2 className="mb-3.5 text-[44px] font-extrabold leading-[1.05] tracking-[-0.03em] text-[#0F172A]">{title}</h2>
-      <p className="mb-[26px] text-[16px] text-[#64748B]">{sub}</p>
-      <button
-        onClick={() => onNavigate("create")}
-        className="db-btn rounded-[11px] bg-brand-gradient px-[26px] py-[13px] text-[15px] font-bold text-white"
-        style={{ boxShadow: "0 10px 22px rgba(34,197,94,0.28)" }}
-      >
-        Create Post
-      </button>
     </div>
   );
 }
@@ -556,14 +575,16 @@ export function DashboardScreen({
   active,
   user,
   onNavigate,
+  onCompose,
 }: {
   active: ScreenKey;
   user: User;
   onNavigate: (k: ScreenKey) => void;
+  onCompose: (t: ComposerType) => void;
 }) {
   switch (active) {
     case "create":
-      return <CreateScreen onNavigate={onNavigate} />;
+      return <CreateScreen onCompose={onCompose} onNavigate={onNavigate} />;
     case "studio":
       return <StudioScreen />;
     case "bulk":
@@ -571,13 +592,13 @@ export function DashboardScreen({
     case "calendar":
       return <CalendarScreen />;
     case "all":
-      return <PostsScreen title="All Posts" />;
+      return <PostsListScreen title="All Posts" emptyTitle="No posts yet" emptySub="Create your first post to see it here." onNavigate={onNavigate} />;
     case "posted":
-      return <PostsScreen title="Posted Posts" />;
+      return <PostsListScreen title="Posted" status="published" emptyTitle="No posted content yet" emptySub="Once you publish, your posts show up here." onNavigate={onNavigate} />;
     case "scheduled":
-      return <EmptyScreen title="No scheduled posts" sub="Schedule a post and it will show up here." onNavigate={onNavigate} />;
+      return <PostsListScreen title="Scheduled" status="scheduled" emptyTitle="No scheduled posts" emptySub="Schedule a post and it will show up here." onNavigate={onNavigate} />;
     case "drafts":
-      return <EmptyScreen title="No drafts yet" sub="Save a post as a draft and it will show up here." onNavigate={onNavigate} />;
+      return <PostsListScreen title="Drafts" status="draft" emptyTitle="No drafts yet" emptySub="Save a post as a draft and it will show up here." onNavigate={onNavigate} />;
     case "analytics":
       return <AnalyticsScreen />;
     case "connections":

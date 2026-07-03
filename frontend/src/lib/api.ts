@@ -1,4 +1,13 @@
-import type { ApiErrorBody, AuthResponse, AuthTokens, User } from "@/types";
+import type {
+  ApiErrorBody,
+  AuthResponse,
+  AuthTokens,
+  Page,
+  Post,
+  PostStatus,
+  SocialAccount,
+  User,
+} from "@/types";
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -171,6 +180,17 @@ export const authApi = {
       body: input,
       skipAuthRefresh: true,
     }),
+};
+
+export const postsApi = {
+  list: (status?: PostStatus) =>
+    request<Page<Post>>(`/posts${status ? `?status=${status}` : ""}`),
+  create: (input: { content: string; media_urls?: string[]; hashtags?: string[] }) =>
+    request<Post>("/posts", { method: "POST", body: input }),
+};
+
+export const scheduleApi = {
+  accounts: () => request<SocialAccount[]>("/schedule/accounts"),
 };
 
 export { request };
