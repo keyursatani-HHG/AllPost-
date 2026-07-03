@@ -19,6 +19,9 @@ services:
     startCommand: python -m app.db.init_db && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      # Pin the tested Python version (Render's default 3.13 can lack some wheels).
+      - key: PYTHON_VERSION
+        value: "3.12.8"
       - key: DATABASE_URL
         fromDatabase:
           name: postly-db
