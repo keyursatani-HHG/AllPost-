@@ -9,21 +9,33 @@ import { DashboardSidebar, type ScreenKey } from "@/components/dashboard/sidebar
 import { DashboardScreen } from "@/components/dashboard/screens";
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, status, logout } = useAuth();
   const router = useRouter();
   const [active, setActive] = React.useState<ScreenKey>("create");
   const [drawer, setDrawer] = React.useState(false);
 
-  // Real user when authenticated; sensible fallbacks so the shell always renders.
-  const displayUser = {
-    name: user?.name ?? "hhgsoftechteam1",
-    email: user?.email ?? "hhgsoftechteam1@gmail.com",
-  };
+  // Protected route: send unauthenticated visitors to login once auth resolves.
+  React.useEffect(() => {
+    if (status === "unauthenticated") router.replace("/login?from=/dashboard");
+  }, [status, router]);
 
   const navigate = React.useCallback((k: ScreenKey) => {
     setActive(k);
     setDrawer(false);
   }, []);
+
+  // While the session is resolving (or redirecting), show a lightweight loader.
+  if (status !== "authenticated" || !user) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#F3F4F6]">
+        <div className="h-1 w-40 overflow-hidden rounded-full bg-slate-200" role="status" aria-label="Loading">
+          <div className="h-full w-1/2 animate-marquee rounded-full bg-brand-gradient" />
+        </div>
+      </div>
+    );
+  }
+
+  const displayUser = { name: user.name, email: user.email };
 
   async function handleLogout() {
     await logout();
