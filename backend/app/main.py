@@ -3,9 +3,12 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+import pathlib
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
@@ -65,6 +68,11 @@ def create_app() -> FastAPI:
 
     # --- Routes ---
     app.include_router(api_router, prefix=settings.API_V1_STR)
+
+    # Serve uploaded media (see app/api/v1/media.py).
+    uploads = pathlib.Path("uploads")
+    uploads.mkdir(exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
     @app.get("/health", tags=["Health"], summary="Liveness probe")
     async def health() -> dict[str, str]:

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import {
   Activity,
   AlignLeft,
@@ -21,8 +22,8 @@ import {
   Video,
 } from "lucide-react";
 
-import { postsApi } from "@/lib/api";
-import type { Post, PostStatus } from "@/types";
+import { postsApi, scheduleApi, ApiError } from "@/lib/api";
+import type { Post, PostStatus, SocialAccount } from "@/types";
 import { PlatformGlyph, PlatformRow } from "@/components/dashboard/icons";
 import type { ScreenKey } from "@/components/dashboard/sidebar";
 import type { ComposerType } from "@/components/dashboard/composer";
@@ -389,50 +390,86 @@ function AnalyticsScreen() {
 /* -------------------------------------------------------------------------- */
 /*  Connections                                                                */
 /* -------------------------------------------------------------------------- */
+const CONNECT_PLATFORMS = [
+  { name: "Instagram", platform: "instagram", code: "ig", bg: "linear-gradient(135deg,#E1306C,#F77737)" },
+  { name: "LinkedIn", platform: "linkedin", code: "li", bg: "#0A66C2" },
+  { name: "Pinterest", platform: "pinterest", code: "pin", bg: "#E60023" },
+  { name: "X / Twitter", platform: "x", code: "tw", bg: "#0F172A" },
+  { name: "YouTube", platform: "youtube", code: "yt", bg: "#FF0000" },
+  { name: "TikTok", platform: "tiktok", code: "tt", bg: "#0F172A" },
+  { name: "Facebook", platform: "facebook", code: "fb", bg: "#1877F2" },
+  { name: "Bluesky", platform: "bluesky", code: "bs", bg: "#1185FE" },
+  { name: "Threads", platform: "threads", code: "th", bg: "#0F172A" },
+];
+
 function ConnectionsScreen() {
-  const conn: {
-    name: string;
-    code: string;
-    bg: string;
-    accounts: { t: string; i?: string; ic?: string }[];
-  }[] = [
-    { name: "Instagram", code: "ig", bg: "linear-gradient(135deg,#E1306C,#F77737)", accounts: [{ t: "hhgsoftechteam1" }] },
-    { name: "Linkedin", code: "li", bg: "#0A66C2", accounts: [{ t: "HHG Team1", i: "H", ic: "#EC4899" }] },
-    { name: "Pinterest", code: "pin", bg: "#E60023", accounts: [{ t: "hhgsoftechteam1" }] },
-    { name: "Twitter", code: "tw", bg: "#0F172A", accounts: [{ t: "Hirendevani_" }, { t: "HirenDevani10" }] },
-    { name: "Youtube", code: "yt", bg: "#FF0000", accounts: [] },
-    { name: "Tiktok", code: "tt", bg: "#0F172A", accounts: [] },
-    { name: "Facebook", code: "fb", bg: "#1877F2", accounts: [] },
-    { name: "Bluesky", code: "bs", bg: "#1185FE", accounts: [] },
-    { name: "Threads", code: "th", bg: "#0F172A", accounts: [] },
-    { name: "Google Business", code: "gb", bg: "#4285F4", accounts: [] },
-  ];
+  const [accounts, setAccounts] = React.useState<SocialAccount[]>([]);
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  const load = React.useCallback(() => {
+    scheduleApi.accounts().then(setAccounts).catch(() => setAccounts([]));
+  }, []);
+  React.useEffect(() => load(), [load]);
+
+  async function connect(platform: string, name: string) {
+    const handle = window.prompt(`Enter the @handle to connect for ${name}:`)?.trim();
+    if (!handle) return;
+    setBusy(platform);
+    try {
+      await scheduleApi.connect({ platform, external_id: crypto.randomUUID(), handle });
+      toast.success(`Connected ${name}`, { description: "You can now select it when composing." });
+      load();
+    } catch (e) {
+      toast.error("Couldn't connect", { description: e instanceof ApiError ? e.message : "Please try again." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disconnect(id: string) {
+    try {
+      await scheduleApi.disconnect(id);
+      load();
+    } catch {
+      toast.error("Couldn't disconnect");
+    }
+  }
+
   return (
     <div>
       <h1 className={`${h1} mb-6`}>Connected Accounts</h1>
       <div className={`px-7 py-[26px] ${card}`}>
         <div className="flex flex-col gap-3.5">
-          {conn.map((c) => (
-            <div key={c.name} className="flex flex-wrap items-center gap-4">
-              <span className="grid size-[34px] shrink-0 place-items-center rounded-[9px]" style={{ background: c.bg }}>
-                <PlatformGlyph code={c.code} size={18} color="#fff" />
-              </span>
-              <button className="min-w-[210px] rounded-[9px] bg-[#0F172A] px-3.5 py-[9px] text-left text-[13px] font-semibold text-white">
-                Connect {c.name}
-              </button>
-              <div className="flex flex-wrap gap-2.5">
-                {c.accounts.map((a, i) => (
-                  <span key={i} className="inline-flex items-center gap-[7px] rounded-full bg-[#F1F5F9] py-1 pl-1 pr-2.5">
-                    <span className="grid size-[22px] place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: a.ic || "#CBD5E1" }}>
-                      {a.i || a.t.slice(0, 2)}
+          {CONNECT_PLATFORMS.map((p) => {
+            const mine = accounts.filter((a) => a.platform === p.platform);
+            return (
+              <div key={p.name} className="flex flex-wrap items-center gap-4">
+                <span className="grid size-[34px] shrink-0 place-items-center rounded-[9px]" style={{ background: p.bg }}>
+                  <PlatformGlyph code={p.code} size={18} color="#fff" />
+                </span>
+                <button
+                  onClick={() => connect(p.platform, p.name)}
+                  disabled={busy === p.platform}
+                  className="min-w-[210px] rounded-[9px] bg-[#0F172A] px-3.5 py-[9px] text-left text-[13px] font-semibold text-white disabled:opacity-60"
+                >
+                  {busy === p.platform ? "Connecting…" : `Connect ${p.name}`}
+                </button>
+                <div className="flex flex-wrap gap-2.5">
+                  {mine.map((a) => (
+                    <span key={a.id} className="inline-flex items-center gap-[7px] rounded-full bg-[#F1F5F9] py-1 pl-1 pr-2.5">
+                      <span className="grid size-[22px] place-items-center rounded-full bg-[#CBD5E1] text-[9px] font-bold text-white">
+                        {a.handle.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="text-[12.5px] font-semibold text-[#334155]">{a.handle}</span>
+                      <button onClick={() => disconnect(a.id)} className="text-[13px] text-[#EF4444]" aria-label="Disconnect">
+                        ×
+                      </button>
                     </span>
-                    <span className="text-[12.5px] font-semibold text-[#334155]">{a.t}</span>
-                    <span className="cursor-pointer text-[13px] text-[#EF4444]">×</span>
-                  </span>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

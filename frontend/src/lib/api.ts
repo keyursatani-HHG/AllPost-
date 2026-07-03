@@ -191,6 +191,49 @@ export const postsApi = {
 
 export const scheduleApi = {
   accounts: () => request<SocialAccount[]>("/schedule/accounts"),
+  connect: (input: {
+    platform: string;
+    external_id: string;
+    handle: string;
+    display_name?: string;
+  }) =>
+    request<SocialAccount>("/schedule/accounts", { method: "POST", body: input }),
+  disconnect: (id: string) =>
+    request<void>(`/schedule/accounts/${id}`, { method: "DELETE" }),
+  schedule: (input: {
+    post_id: string;
+    social_account_ids: string[];
+    scheduled_at: string;
+  }) => request("/schedule", { method: "POST", body: input }),
 };
+
+export const mediaApi = {
+  upload: async (file: File): Promise<{ url: string; content_type?: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/media/upload`, {
+        method: "POST",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        body: form,
+        credentials: "include",
+      });
+    } catch {
+      throw new ApiError("Cannot reach the server.", 0, { code: "network_error" });
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => undefined);
+      throw parseErrorBody(body as ApiErrorBody, res.status);
+    }
+    return res.json();
+  },
+};
+
+/** Absolute URL for a backend-relative media path (e.g. "/uploads/x.png"). */
+export function mediaUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return API_URL.replace(/\/api\/v1\/?$/, "") + path;
+}
 
 export { request };

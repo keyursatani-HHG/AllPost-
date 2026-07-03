@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { postsApi, scheduleApi, ApiError } from "@/lib/api";
+import { postsApi, scheduleApi, mediaApi, ApiError } from "@/lib/api";
 import type { SocialAccount } from "@/types";
 import { PlatformGlyph } from "@/components/dashboard/icons";
 
@@ -96,15 +96,37 @@ export function Composer({ type, onBack }: { type: ComposerType; onBack: () => v
       toast.error("Select an account to post to");
       return;
     }
+    if (kind === "post" && !isText && files.length === 0) {
+      toast.error("Add an image or video to post");
+      return;
+    }
     setBusy(kind);
     try {
-      await postsApi.create({ content, hashtags: [] });
-      toast.success(kind === "draft" ? "Saved to drafts" : "Post created", {
-        description:
-          kind === "draft"
-            ? "Find it under Posts → Drafts."
-            : `Queued for ${selected.size} account${selected.size > 1 ? "s" : ""}.`,
-      });
+      // 1. Upload any media the user picked.
+      let media_urls: string[] = [];
+      if (files.length > 0) {
+        const uploaded = await Promise.all(files.map((f) => mediaApi.upload(f)));
+        media_urls = uploaded.map((u) => u.url);
+      }
+      // 2. Create the post record.
+      const post = await postsApi.create({ content, media_urls, hashtags: [] });
+      // 3. If posting/scheduling, queue it to the selected accounts.
+      if (kind === "post") {
+        await scheduleApi.schedule({
+          post_id: post.id,
+          social_account_ids: Array.from(selected),
+          scheduled_at: new Date(Date.now() + (scheduleOn ? 3600_000 : 0)).toISOString(),
+        });
+      }
+      toast.success(
+        kind === "draft" ? "Saved to drafts" : scheduleOn ? "Scheduled" : "Queued to post",
+        {
+          description:
+            kind === "draft"
+              ? "Find it under Posts → Drafts."
+              : `${selected.size} account${selected.size > 1 ? "s" : ""} · see Posts → Scheduled.`,
+        }
+      );
       onBack();
     } catch (e) {
       toast.error("Couldn't save", {
@@ -191,8 +213,22 @@ export function Composer({ type, onBack }: { type: ComposerType; onBack: () => v
                 {UPLOAD_HINT[type as Exclude<ComposerType, "text">]} <Info className="size-3.5 text-[#CBD5E1]" />
               </div>
               {files.length > 0 && (
-                <div className="mt-3 text-[13px] font-semibold text-[#16A34A]">
-                  {files.length} file{files.length > 1 ? "s" : ""} selected: {files.map((f) => f.name).join(", ")}
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {files.map((f, i) =>
+                    f.type.startsWith("image/") ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={i}
+                        src={URL.createObjectURL(f)}
+                        alt={f.name}
+                        className="size-20 rounded-lg border border-[#E5E7EB] object-cover"
+                      />
+                    ) : (
+                      <div key={i} className="grid size-20 place-items-center rounded-lg border border-[#E5E7EB] bg-[#F1F5F9] px-1 text-center text-[10px] font-semibold text-[#64748B]">
+                        {(f.name.split(".").pop() || "file").toUpperCase()}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
               <button
