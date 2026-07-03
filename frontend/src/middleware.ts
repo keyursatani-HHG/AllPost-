@@ -8,7 +8,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * cookies, so no token is ever exposed to client-side JS.
  */
 const AUTH_COOKIE = "postly_refresh";
-const PROTECTED = ["/dashboard"];
+// TEMP: /dashboard is publicly viewable while it's a design mockup with no real
+// data. Re-add "/dashboard" here once the backend/login is live to protect it.
+const PROTECTED: string[] = [];
 const AUTH_PAGES = ["/login", "/register"];
 
 export function middleware(req: NextRequest) {
