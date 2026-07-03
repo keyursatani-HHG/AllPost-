@@ -5,6 +5,7 @@ Passwords) — no OAuth app or review required. Posts text + up to 4 images.
 """
 from __future__ import annotations
 
+import io
 from datetime import datetime, timezone
 
 import httpx
@@ -17,6 +18,43 @@ logger = get_logger(__name__)
 XRPC = "https://bsky.social/xrpc"
 MAX_TEXT = 300  # Bluesky limit (graphemes; chars is a safe approximation)
 MAX_BLOB = 1_000_000  # ~1 MB per image
+
+
+def _fit_image(data: bytes, mime: str) -> tuple[bytes, str]:
+    """Re-encode/downscale an image until it fits Bluesky's blob cap."""
+    if len(data) <= MAX_BLOB:
+        return data, mime
+    try:
+        from PIL import Image
+    except ImportError:
+        raise errors.bad_request(
+            "Image is too large for Bluesky (max ~1 MB).", "bluesky_image_too_large"
+        )
+
+    img = Image.open(io.BytesIO(data))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    quality = 85
+    while True:
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=quality, optimize=True)
+        if buf.tell() <= MAX_BLOB:
+            logger.info(
+                "Compressed image for Bluesky: %d -> %d bytes", len(data), buf.tell()
+            )
+            return buf.getvalue(), "image/jpeg"
+        if quality > 50:
+            quality -= 10
+        elif min(img.size) > 256:
+            img = img.resize(
+                (int(img.width * 0.8), int(img.height * 0.8)), Image.LANCZOS
+            )
+        else:
+            raise errors.bad_request(
+                "Image could not be compressed enough for Bluesky.",
+                "bluesky_image_too_large",
+            )
 
 
 async def create_session(identifier: str, app_password: str) -> dict:
@@ -54,10 +92,7 @@ async def publish(
         uploaded = []
         async with httpx.AsyncClient(timeout=30.0) as client:
             for data, mime in images[:4]:
-                if len(data) > MAX_BLOB:
-                    raise errors.bad_request(
-                        "Image is too large for Bluesky (max ~1 MB).", "bluesky_image_too_large"
-                    )
+                data, mime = _fit_image(data, mime)
                 rb = await client.post(
                     f"{XRPC}/com.atproto.repo.uploadBlob",
                     content=data,

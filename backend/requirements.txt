@@ -26,3 +26,6 @@ boto3==1.35.90
 
 # --- HTTP client ---
 httpx==0.28.1
+
+# --- Image processing (Bluesky blob size cap) ---
+Pillow==12.3.0
