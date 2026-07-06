@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import pathlib
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import errors
+from app.models.calendar_note import CalendarNote
 from app.models.enums import PostStatus, ScheduleStatus, SocialPlatform
 from app.models.post import Post
 from app.models.scheduled_post import ScheduledPost
@@ -23,6 +24,7 @@ _MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".webp": "image/webp", ".gif": "image/gif",
 }
+_VIDEO_MIME = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
 
 
 # --- Social accounts ------------------------------------------------------- #
@@ -124,6 +126,102 @@ async def list_scheduled(
     return list(result.scalars().all()), int(total or 0)
 
 
+async def calendar_items(
+    db: AsyncSession, user_id: uuid.UUID, start: datetime, end: datetime
+) -> list[dict]:
+    """Scheduled/published items for a user within [start, end), with post content."""
+    rows = await db.execute(
+        select(
+            ScheduledPost.id,
+            ScheduledPost.post_id,
+            ScheduledPost.scheduled_at,
+            ScheduledPost.published_at,
+            ScheduledPost.status,
+            ScheduledPost.external_post_id,
+            Post.content,
+            Post.media_urls,
+            SocialAccount.platform,
+            SocialAccount.handle,
+        )
+        .join(Post, ScheduledPost.post_id == Post.id)
+        .join(SocialAccount, ScheduledPost.social_account_id == SocialAccount.id)
+        .where(
+            Post.user_id == user_id,
+            ScheduledPost.scheduled_at >= start,
+            ScheduledPost.scheduled_at < end,
+        )
+        .order_by(ScheduledPost.scheduled_at.asc())
+    )
+    items: list[dict] = []
+    for r in rows.all():
+        platform = r.platform.value if hasattr(r.platform, "value") else str(r.platform)
+        url = (
+            bluesky.post_url(r.external_post_id, r.handle)
+            if r.external_post_id and platform == "bluesky"
+            else None
+        )
+        items.append(
+            {
+                "id": r.id,
+                "post_id": r.post_id,
+                "scheduled_at": r.scheduled_at,
+                "published_at": r.published_at,
+                "status": r.status,
+                "content": r.content or "",
+                "platform": platform,
+                "handle": r.handle,
+                "has_media": bool(r.media_urls),
+                "url": url,
+            }
+        )
+    return items
+
+
+# --- Calendar notes -------------------------------------------------------- #
+async def list_notes(
+    db: AsyncSession, user_id: uuid.UUID, start: date, end: date
+) -> list[CalendarNote]:
+    result = await db.execute(
+        select(CalendarNote).where(
+            CalendarNote.user_id == user_id,
+            CalendarNote.note_date >= start,
+            CalendarNote.note_date <= end,
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_note(
+    db: AsyncSession, user_id: uuid.UUID, note_date: date, content: str
+) -> CalendarNote:
+    result = await db.execute(
+        select(CalendarNote).where(
+            CalendarNote.user_id == user_id, CalendarNote.note_date == note_date
+        )
+    )
+    note = result.scalar_one_or_none()
+    if note is None:
+        note = CalendarNote(user_id=user_id, note_date=note_date, content=content)
+        db.add(note)
+    else:
+        note.content = content
+    await db.commit()
+    await db.refresh(note)
+    return note
+
+
+async def delete_note(db: AsyncSession, user_id: uuid.UUID, note_date: date) -> None:
+    result = await db.execute(
+        select(CalendarNote).where(
+            CalendarNote.user_id == user_id, CalendarNote.note_date == note_date
+        )
+    )
+    note = result.scalar_one_or_none()
+    if note is not None:
+        await db.delete(note)
+        await db.commit()
+
+
 async def cancel_scheduled(
     db: AsyncSession, user_id: uuid.UUID, scheduled_id: uuid.UUID
 ) -> ScheduledPost:
@@ -178,6 +276,44 @@ async def connect_bluesky(
     return acc
 
 
+def _load_post_media(
+    post: Post,
+) -> tuple[list[tuple[bytes, str]], tuple[bytes, str] | None, tuple[int, int] | None]:
+    """Read a post's media from disk. A post is either images (up to 4) or one video."""
+    images: list[tuple[bytes, str]] = []
+    video: tuple[bytes, str] | None = None
+    aspect: tuple[int, int] | None = None
+    for url in post.media_urls or []:
+        path = UPLOAD_DIR / pathlib.Path(url).name
+        if not path.exists():
+            continue
+        ext = path.suffix.lower()
+        if ext in _VIDEO_MIME and video is None:
+            video = (path.read_bytes(), _VIDEO_MIME[ext])
+            from app.services import video as video_service
+
+            aspect = video_service.probe_dimensions(video[0])
+        elif ext in _MIME:
+            images.append((path.read_bytes(), _MIME[ext]))
+    return images, video, aspect
+
+
+async def publish_to_account(post: Post, account: SocialAccount) -> str:
+    """Publish `post` to one `account`; return the external post URI or raise.
+
+    Shared by immediate publish and the scheduled-post worker.
+    """
+    if account.platform != SocialPlatform.bluesky or not account.access_token:
+        raise errors.bad_request(
+            "Live publishing isn't available for this platform yet.", "platform_unsupported"
+        )
+    images, video, aspect = _load_post_media(post)
+    return await bluesky.publish(
+        account.handle, account.access_token, post.content, images,
+        video=video, aspect_ratio=aspect,
+    )
+
+
 async def publish_now(
     db: AsyncSession, user: User, post_id: uuid.UUID, account_ids: list[uuid.UUID]
 ) -> list[dict]:
@@ -195,13 +331,7 @@ async def publish_now(
     if not accounts:
         raise errors.bad_request("No valid accounts selected", "invalid_accounts")
 
-    # Load media bytes from disk for platforms that accept media uploads.
-    images: list[tuple[bytes, str]] = []
-    for url in post.media_urls or []:
-        path = UPLOAD_DIR / pathlib.Path(url).name
-        mime = _MIME.get(path.suffix.lower())
-        if mime and path.exists():
-            images.append((path.read_bytes(), mime))
+    images, video, video_aspect = _load_post_media(post)
 
     outcomes: list[dict] = []
     published_any = False
@@ -213,7 +343,10 @@ async def publish_now(
         )
         if acc.platform == SocialPlatform.bluesky and acc.access_token:
             try:
-                uri = await bluesky.publish(acc.handle, acc.access_token, post.content, images)
+                uri = await bluesky.publish(
+                    acc.handle, acc.access_token, post.content, images,
+                    video=video, aspect_ratio=video_aspect,
+                )
                 sp.status = ScheduleStatus.published
                 sp.published_at = datetime.now(timezone.utc)
                 sp.external_post_id = uri

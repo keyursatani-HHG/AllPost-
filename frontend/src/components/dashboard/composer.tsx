@@ -59,12 +59,27 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   );
 }
 
-export function Composer({ type, onBack }: { type: ComposerType; onBack: () => void }) {
+/** Format a Date as the local value a <input type="datetime-local"> expects. */
+function toLocalInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function Composer({
+  type,
+  onBack,
+  presetDate,
+}: {
+  type: ComposerType;
+  onBack: () => void;
+  presetDate?: string; // datetime-local string to pre-schedule (from the calendar's "+")
+}) {
   const [accounts, setAccounts] = React.useState<SocialAccount[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [caption, setCaption] = React.useState("");
   const [files, setFiles] = React.useState<File[]>([]);
-  const [scheduleOn, setScheduleOn] = React.useState(false);
+  const [scheduleOn, setScheduleOn] = React.useState(!!presetDate);
+  const [scheduleAt, setScheduleAt] = React.useState(presetDate ?? "");
   const [remember, setRemember] = React.useState(false);
   const [busy, setBusy] = React.useState<null | "draft" | "post">(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -100,6 +115,16 @@ export function Composer({ type, onBack }: { type: ComposerType; onBack: () => v
       toast.error("Add an image or video to post");
       return;
     }
+    if (kind === "post" && scheduleOn) {
+      if (!scheduleAt) {
+        toast.error("Pick a date and time to schedule");
+        return;
+      }
+      if (new Date(scheduleAt).getTime() <= Date.now()) {
+        toast.error("Schedule time must be in the future");
+        return;
+      }
+    }
     setBusy(kind);
     try {
       // 1. Upload any media the user picked.
@@ -114,13 +139,14 @@ export function Composer({ type, onBack }: { type: ComposerType; onBack: () => v
       if (kind === "draft") {
         toast.success("Saved to drafts", { description: "Find it under Posts → Drafts." });
       } else if (scheduleOn) {
+        const when = new Date(scheduleAt);
         await scheduleApi.schedule({
           post_id: post.id,
           social_account_ids: Array.from(selected),
-          scheduled_at: new Date(Date.now() + 3600_000).toISOString(),
+          scheduled_at: when.toISOString(),
         });
         toast.success("Scheduled", {
-          description: `${selected.size} account${selected.size > 1 ? "s" : ""} · see Posts → Scheduled.`,
+          description: `${when.toLocaleString()} · ${selected.size} account${selected.size > 1 ? "s" : ""} · see Posts → Scheduled.`,
         });
       } else {
         const { results } = await scheduleApi.publish({
@@ -313,8 +339,32 @@ export function Composer({ type, onBack }: { type: ComposerType; onBack: () => v
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
             <div className="mb-4 flex items-center justify-between">
               <span className="text-[16px] font-extrabold text-[#0F172A]">Schedule post</span>
-              <Toggle on={scheduleOn} onToggle={() => setScheduleOn((v) => !v)} />
+              <Toggle
+                on={scheduleOn}
+                onToggle={() =>
+                  setScheduleOn((v) => {
+                    // Default to ~1 hour out the first time it's switched on.
+                    if (!v && !scheduleAt) setScheduleAt(toLocalInput(new Date(Date.now() + 3600_000)));
+                    return !v;
+                  })
+                }
+              />
             </div>
+            {scheduleOn && (
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[#64748B]">Date &amp; time</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleAt}
+                  min={toLocalInput(new Date())}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                  className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-[14px] text-[#0F172A] outline-none focus:border-[#86EFAC]"
+                />
+                <p className="mt-1.5 text-[12px] text-[#94A3B8]">
+                  Your local time ({Intl.DateTimeFormat().resolvedOptions().timeZone}). Posts publish automatically.
+                </p>
+              </div>
+            )}
             <button
               onClick={() => save("post")}
               disabled={!canPost || busy !== null}

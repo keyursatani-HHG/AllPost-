@@ -1,5 +1,6 @@
 """Import all models so Base.metadata is fully populated (for Alembic & create_all)."""
 from app.models.analytics import Analytics
+from app.models.calendar_note import CalendarNote
 from app.models.enums import (
     PaymentStatus,
     PostStatus,
@@ -20,6 +21,7 @@ from app.models.user import User
 
 __all__ = [
     "Analytics",
+    "CalendarNote",
     "Payment",
     "Post",
     "RefreshToken",

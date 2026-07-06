@@ -1,5 +1,8 @@
 import type {
+  AnalyticsSummary,
   ApiErrorBody,
+  CalendarItem,
+  CalendarNote,
   AuthResponse,
   AuthTokens,
   Page,
@@ -207,6 +210,16 @@ export const scheduleApi = {
   }) => request("/schedule", { method: "POST", body: input }),
   connectBluesky: (input: { identifier: string; app_password: string }) =>
     request<SocialAccount>("/schedule/accounts/bluesky", { method: "POST", body: input }),
+  calendar: (startISO: string, endISO: string) =>
+    request<CalendarItem[]>(
+      `/schedule/calendar?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`
+    ),
+  notes: (start: string, end: string) =>
+    request<CalendarNote[]>(`/schedule/notes?start=${start}&end=${end}`),
+  upsertNote: (note_date: string, content: string) =>
+    request<CalendarNote>("/schedule/notes", { method: "PUT", body: { note_date, content } }),
+  deleteNote: (note_date: string) =>
+    request<void>(`/schedule/notes/${note_date}`, { method: "DELETE" }),
   publish: (input: { post_id: string; social_account_ids: string[] }) =>
     request<{
       results: {
@@ -217,6 +230,11 @@ export const scheduleApi = {
         error?: string;
       }[];
     }>("/schedule/publish", { method: "POST", body: input }),
+};
+
+export const analyticsApi = {
+  summary: () => request<AnalyticsSummary>("/analytics/summary"),
+  refresh: () => request<AnalyticsSummary>("/analytics/refresh", { method: "POST" }),
 };
 
 export const mediaApi = {
@@ -239,6 +257,40 @@ export const mediaApi = {
       throw parseErrorBody(body as ApiErrorBody, res.status);
     }
     return res.json();
+  },
+};
+
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: form,
+      credentials: "include",
+    });
+  } catch {
+    throw new ApiError("Cannot reach the server.", 0, { code: "network_error" });
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => undefined);
+    throw parseErrorBody(body as ApiErrorBody, res.status);
+  }
+  return res.json();
+}
+
+type GenVideo = { url: string; content_type?: string; size?: number };
+
+export const studioApi = {
+  gridVideo: (files: File[]): Promise<GenVideo> => {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", f));
+    return postForm<GenVideo>("/studio/grid-video", form);
+  },
+  fadeVideo: (file: File): Promise<GenVideo> => {
+    const form = new FormData();
+    form.append("file", file);
+    return postForm<GenVideo>("/studio/fade-video", form);
   },
 };
 

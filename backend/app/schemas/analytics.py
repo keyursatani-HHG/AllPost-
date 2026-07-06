@@ -30,10 +30,25 @@ class PlatformBreakdown(BaseModel):
     engagement: int
 
 
+class TopPost(BaseModel):
+    post_id: uuid.UUID
+    content: str
+    likes: int
+    comments: int
+    shares: int
+    engagement: int
+    published_at: datetime | None = None
+    url: str | None = None
+
+
 class AnalyticsSummary(BaseModel):
     total_posts: int
     total_impressions: int
     total_reach: int
     total_engagement: int
+    total_likes: int = 0
+    total_comments: int = 0
+    total_shares: int = 0
     average_engagement_rate: float
     by_platform: list[PlatformBreakdown]
+    top_posts: list[TopPost] = []

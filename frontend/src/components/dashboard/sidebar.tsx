@@ -2,23 +2,14 @@
 
 import {
   BarChart3,
-  BookOpen,
-  Boxes,
   Calendar,
   CheckCircle2,
-  ChevronDown,
   ChevronsUpDown,
-  CreditCard,
   FileText,
-  Gift,
-  KeyRound,
   Layers,
   Link2,
   List,
-  MessageSquare,
   Pencil,
-  Plus,
-  Send,
   Settings,
   Sparkles,
   Timer,
@@ -75,18 +66,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Configuration",
     items: [
       { key: "settings", label: "Settings", Icon: Settings },
-      { key: "apikeys", label: "API Keys", Icon: KeyRound },
-      { key: "billing", label: "Billing", Icon: CreditCard },
     ],
   },
-];
-
-const SUPPORT = [
-  { label: "Share feedback", Icon: MessageSquare },
-  { label: "Earn 30% referral", Icon: Gift },
-  { label: "Stay updated", Icon: Send },
-  { label: "Growth guide", Icon: BookOpen },
-  { label: "Docs", Icon: BookOpen },
 ];
 
 export function DashboardSidebar({
@@ -94,14 +75,12 @@ export function DashboardSidebar({
   onNavigate,
   userName,
   plan,
-  workspaceName = "Main",
   onLogout,
 }: {
   active: ScreenKey;
   onNavigate: (key: ScreenKey) => void;
   userName: string;
   plan: string;
-  workspaceName?: string;
   onLogout: () => void;
 }) {
   const initial = (userName[0] || "A").toUpperCase();
@@ -125,32 +104,6 @@ export function DashboardSidebar({
           <span className="text-[17px] font-extrabold tracking-tight text-[#0F172A]">
             postly
           </span>
-        </button>
-      </div>
-
-      {/* Workspace */}
-      <div className="px-[14px] pb-3 pt-1.5">
-        <div className="px-1 pb-1.5 text-[11px] font-bold tracking-wide text-[#94A3B8]">
-          Workspace
-        </div>
-        <button className="nav-item flex w-full items-center justify-between gap-2 rounded-[10px] border border-[#EEF2F6] px-[11px] py-[9px]">
-          <span className="flex items-center gap-[9px] text-[14px] font-semibold text-[#334155]">
-            <Boxes className="size-[15px] text-[#94A3B8]" strokeWidth={2} />
-            {workspaceName}
-          </span>
-          <ChevronDown className="size-3.5 text-[#94A3B8]" strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* Create post CTA */}
-      <div className="px-[14px] pb-[14px]">
-        <button
-          onClick={() => onNavigate("create")}
-          className="db-btn flex w-full items-center justify-center gap-2 rounded-[11px] bg-brand-gradient px-3 py-[11px] text-[14px] font-bold text-white"
-          style={{ boxShadow: "0 8px 18px rgba(34,197,94,0.30)" }}
-        >
-          <Plus className="size-4" strokeWidth={2.4} />
-          Create post
         </button>
       </div>
 
@@ -179,23 +132,6 @@ export function DashboardSidebar({
           })}
         </div>
       ))}
-
-      {/* Support */}
-      <div className="px-[14px] pb-2">
-        <div className="px-1 pb-1.5 pt-2 text-[11px] font-bold tracking-wide text-[#94A3B8]">
-          Support
-        </div>
-        {SUPPORT.map((s) => (
-          <a
-            key={s.label}
-            href="#"
-            className="nav-item flex items-center gap-[11px] rounded-[10px] px-[11px] py-[9px] text-[13.5px] font-semibold text-[#334155]"
-          >
-            <s.Icon className="size-[17px] text-[#94A3B8]" strokeWidth={1.9} />
-            {s.label}
-          </a>
-        ))}
-      </div>
 
       {/* Account */}
       <div className="mt-auto border-t border-[#EEF2F6] px-[14px] py-3">

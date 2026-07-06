@@ -1,7 +1,8 @@
 """FastAPI application factory and entrypoint."""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 import pathlib
 
@@ -33,7 +34,19 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting %s (%s)", settings.PROJECT_NAME, settings.ENVIRONMENT)
     await init_redis()
+
+    # Background worker: publishes scheduled posts when they come due.
+    from app.services import scheduler
+
+    stop = asyncio.Event()
+    worker = asyncio.create_task(scheduler.run(stop))
+
     yield
+
+    stop.set()
+    worker.cancel()
+    with suppress(asyncio.CancelledError):
+        await worker
     await close_redis()
     logger.info("Shutdown complete")
 

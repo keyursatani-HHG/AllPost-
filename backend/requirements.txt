@@ -29,3 +29,8 @@ httpx==0.28.1
 
 # --- Image processing (Bluesky blob size cap) ---
 Pillow==12.3.0
+
+# --- Video generation (Content Studio 2x2 grid video) ---
+imageio==2.37.3
+imageio-ffmpeg==0.6.0    # bundles a static ffmpeg binary; no system install needed
+numpy==2.5.1

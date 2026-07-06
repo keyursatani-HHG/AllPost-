@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -74,3 +74,29 @@ class PublishResult(BaseModel):
 
 class PublishResponse(BaseModel):
     results: list[PublishResult]
+
+
+class CalendarItem(BaseModel):
+    id: uuid.UUID
+    post_id: uuid.UUID
+    scheduled_at: datetime
+    published_at: datetime | None = None
+    status: ScheduleStatus
+    content: str
+    platform: str
+    handle: str
+    has_media: bool = False
+    url: str | None = None
+
+
+class CalendarNoteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    note_date: date
+    content: str
+
+
+class CalendarNoteWrite(BaseModel):
+    note_date: date
+    content: str = Field(min_length=1, max_length=2000)

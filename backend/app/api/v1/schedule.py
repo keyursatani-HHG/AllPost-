@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from datetime import date, datetime
 
 from fastapi import APIRouter, Response, status
 
@@ -11,6 +12,9 @@ from app.models.enums import ScheduleStatus
 from app.schemas.common import Page, PageMeta
 from app.schemas.schedule import (
     BlueskyConnect,
+    CalendarItem,
+    CalendarNoteRead,
+    CalendarNoteWrite,
     PublishRequest,
     PublishResponse,
     ScheduleCreate,
@@ -71,6 +75,59 @@ async def disconnect_account(
 
 
 # --- Scheduling ------------------------------------------------------------ #
+@router.get(
+    "/calendar",
+    response_model=list[CalendarItem],
+    summary="Scheduled/published items in a date range (for the calendar)",
+)
+async def calendar(
+    current_user: CurrentUser,
+    db: DbSession,
+    start: datetime,
+    end: datetime,
+) -> list[CalendarItem]:
+    rows = await schedule_service.calendar_items(db, current_user.id, start, end)
+    return [CalendarItem.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/notes",
+    response_model=list[CalendarNoteRead],
+    summary="Calendar notes in a date range",
+)
+async def list_notes(
+    current_user: CurrentUser, db: DbSession, start: date, end: date
+) -> list[CalendarNoteRead]:
+    notes = await schedule_service.list_notes(db, current_user.id, start, end)
+    return [CalendarNoteRead.model_validate(n) for n in notes]
+
+
+@router.put(
+    "/notes",
+    response_model=CalendarNoteRead,
+    summary="Create or update the note for a day",
+)
+async def upsert_note(
+    data: CalendarNoteWrite, current_user: CurrentUser, db: DbSession
+) -> CalendarNoteRead:
+    note = await schedule_service.upsert_note(
+        db, current_user.id, data.note_date, data.content
+    )
+    return CalendarNoteRead.model_validate(note)
+
+
+@router.delete(
+    "/notes/{note_date}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete the note for a day",
+)
+async def delete_note(
+    note_date: date, current_user: CurrentUser, db: DbSession
+) -> Response:
+    await schedule_service.delete_note(db, current_user.id, note_date)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("", response_model=Page[ScheduledPostRead], summary="List scheduled posts")
 async def list_scheduled(
     current_user: CurrentUser,

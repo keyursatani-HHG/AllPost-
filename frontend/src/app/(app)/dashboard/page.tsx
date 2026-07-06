@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [active, setActive] = React.useState<ScreenKey>("create");
   const [drawer, setDrawer] = React.useState(false);
   const [composer, setComposer] = React.useState<ComposerType | null>(null);
+  const [composerDate, setComposerDate] = React.useState<string | undefined>(undefined);
 
   // Protected route: send unauthenticated visitors to login once auth resolves.
   React.useEffect(() => {
@@ -25,6 +26,12 @@ export default function DashboardPage() {
     setActive(k);
     setDrawer(false);
     setComposer(null);
+    setComposerDate(undefined);
+  }, []);
+
+  const openComposer = React.useCallback((t: ComposerType, presetDate?: string) => {
+    setComposer(t);
+    setComposerDate(presetDate);
   }, []);
 
   // While the session is resolving (or redirecting), show a lightweight loader.
@@ -92,13 +99,20 @@ export default function DashboardPage() {
 
         <div className="mx-auto max-w-[1520px] px-6 py-8 lg:px-11 lg:py-[38px]">
           {composer ? (
-            <Composer type={composer} onBack={() => setComposer(null)} />
+            <Composer
+              type={composer}
+              presetDate={composerDate}
+              onBack={() => {
+                setComposer(null);
+                setComposerDate(undefined);
+              }}
+            />
           ) : (
             <DashboardScreen
               active={active}
               user={displayUser}
               onNavigate={navigate}
-              onCompose={setComposer}
+              onCompose={openComposer}
             />
           )}
         </div>

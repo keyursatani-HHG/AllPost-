@@ -17,6 +17,16 @@ async def get_summary(current_user: CurrentUser, db: DbSession) -> AnalyticsSumm
     return await analytics_service.summary(db, current_user.id)
 
 
+@router.post(
+    "/refresh",
+    response_model=AnalyticsSummary,
+    summary="Pull live engagement from platforms, then return the fresh summary",
+)
+async def refresh(current_user: CurrentUser, db: DbSession) -> AnalyticsSummary:
+    await analytics_service.refresh_user_analytics(db, current_user.id)
+    return await analytics_service.summary(db, current_user.id)
+
+
 @router.get(
     "/posts/{post_id}",
     response_model=list[AnalyticsRead],

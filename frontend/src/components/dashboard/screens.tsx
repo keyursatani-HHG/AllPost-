@@ -3,7 +3,6 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  Activity,
   AlignLeft,
   BadgeCheck,
   Camera,
@@ -13,20 +12,29 @@ import {
   Grid2x2,
   Heart,
   Image as ImageIcon,
+  Loader2,
   MessageCircle,
   Mic,
   Package,
+  Pencil,
+  Plus,
   RefreshCw,
+  Repeat2,
   TrendingUp,
   Users,
   Video,
+  X,
 } from "lucide-react";
 
-import { postsApi, scheduleApi, ApiError } from "@/lib/api";
-import type { Post, PostStatus, SocialAccount } from "@/types";
+import { postsApi, scheduleApi, analyticsApi, ApiError } from "@/lib/api";
+import type { AnalyticsSummary, CalendarItem, Post, PostStatus, SocialAccount } from "@/types";
 import { PlatformGlyph, PlatformRow } from "@/components/dashboard/icons";
 import type { ScreenKey } from "@/components/dashboard/sidebar";
 import type { ComposerType } from "@/components/dashboard/composer";
+import { BulkImageUpload } from "@/components/dashboard/bulk-image";
+import { BulkVideoUpload } from "@/components/dashboard/bulk-video";
+import { GridVideoStudio } from "@/components/dashboard/grid-video";
+import { FadeVideoStudio } from "@/components/dashboard/fade-video";
 
 type User = { name: string; email: string };
 
@@ -40,7 +48,7 @@ function CreateScreen({
   onCompose,
   onNavigate,
 }: {
-  onCompose: (t: ComposerType) => void;
+  onCompose: (t: ComposerType, presetDate?: string) => void;
   onNavigate: (k: ScreenKey) => void;
 }) {
   const tiles: { title: string; Icon: typeof AlignLeft; codes: string[]; type: ComposerType }[] = [
@@ -84,10 +92,14 @@ function CreateScreen({
 /*  Studio                                                                     */
 /* -------------------------------------------------------------------------- */
 function StudioScreen() {
-  const cards = [
-    { title: "2×2 Grid Video", desc: "Create viral videos with this 4 image grid format (tested & proven).", views: "20M+ views", Icon: Grid2x2 },
-    { title: "Single Fade-in Video", desc: "Simple format with billions of views — use your imagination to make a viral banger (we'll do the editing).", views: "500M+ views", Icon: ImageIcon },
-    { title: "AI UGC Creator", desc: "Create authentic UGC-style videos in seconds using our AI-powered templates. Perfect for demos and viral content.", views: "1B+ views", Icon: Mic },
+  const [tool, setTool] = React.useState<null | "grid" | "fade">(null);
+  if (tool === "grid") return <GridVideoStudio onBack={() => setTool(null)} />;
+  if (tool === "fade") return <FadeVideoStudio onBack={() => setTool(null)} />;
+
+  const cards: { title: string; desc: string; views: string; Icon: typeof Grid2x2; ready: boolean; onUse?: () => void }[] = [
+    { title: "2×2 Grid Video", desc: "Create viral videos with this 4 image grid format (tested & proven).", views: "20M+ views", Icon: Grid2x2, ready: true, onUse: () => setTool("grid") },
+    { title: "Single Fade-in Video", desc: "Turn a single image into a short fade-in clip — we do the editing.", views: "500M+ views", Icon: ImageIcon, ready: true, onUse: () => setTool("fade") },
+    { title: "AI UGC Creator", desc: "Create authentic UGC-style videos in seconds using our AI-powered templates. Perfect for demos and viral content.", views: "1B+ views", Icon: Mic, ready: false },
   ];
   return (
     <div>
@@ -110,6 +122,7 @@ function StudioScreen() {
           </div>
         </div>
         <button
+          onClick={() => toast.info("Coming soon", { description: "AI UGC Creator isn't available yet." })}
           className="db-btn whitespace-nowrap rounded-xl bg-brand-gradient px-[22px] py-3.5 text-[15px] font-bold text-white"
           style={{ boxShadow: "0 10px 22px rgba(34,197,94,0.28)" }}
         >
@@ -122,14 +135,29 @@ function StudioScreen() {
             <span className="mb-[18px] grid size-11 place-items-center rounded-[11px] border border-[#EEF2F6] bg-[#F8FAFC] text-[#64748B]">
               <c.Icon className="size-6" strokeWidth={1.8} />
             </span>
-            <div className="mb-2 text-[18px] font-extrabold text-[#0F172A]">{c.title}</div>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[18px] font-extrabold text-[#0F172A]">{c.title}</span>
+              {!c.ready && (
+                <span className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-extrabold text-[#64748B]">SOON</span>
+              )}
+            </div>
             <p className="mb-4 flex-1 text-[14px] leading-relaxed text-[#64748B]">{c.desc}</p>
             <div className="mb-[18px] flex items-center gap-4 text-[13px] font-bold text-[#16A34A]">
               <span>🔥 Trending</span>
               <span className="font-semibold text-[#64748B]">📊 {c.views}</span>
             </div>
             <div className="flex items-center gap-3">
-              <button className="db-btn rounded-[10px] bg-brand-gradient px-[18px] py-2.5 text-[13.5px] font-bold text-white">
+              <button
+                onClick={() =>
+                  c.ready && c.onUse
+                    ? c.onUse()
+                    : toast.info("Coming soon", { description: `${c.title} isn't available yet.` })
+                }
+                className={
+                  "db-btn rounded-[10px] px-[18px] py-2.5 text-[13.5px] font-bold text-white " +
+                  (c.ready ? "bg-brand-gradient" : "bg-[#CBD5E1]")
+                }
+              >
                 Use Template
               </button>
               <button className="grid size-[38px] place-items-center rounded-[10px] border border-[#E5E7EB] bg-white text-[#64748B]">
@@ -147,28 +175,49 @@ function StudioScreen() {
 /*  Bulk                                                                       */
 /* -------------------------------------------------------------------------- */
 function BulkScreen() {
-  const cards = [
-    { title: "Bulk Video Upload", desc: "Upload and schedule multiple videos at once.", codes: ["fb", "ig", "li", "pin", "tt", "tw", "th", "yt"] },
-    { title: "Bulk Image Upload", desc: "Upload and schedule multiple images at once.", codes: ["fb", "ig", "li", "pin", "tt", "tw", "th", "bs"] },
-    { title: "Bulk Video Creation", desc: "Create viral 2×2 grid videos in bulk (AI assisted).", codes: [] },
+  const [tool, setTool] = React.useState<null | "image" | "video">(null);
+  if (tool === "image") return <BulkImageUpload onBack={() => setTool(null)} />;
+  if (tool === "video") return <BulkVideoUpload onBack={() => setTool(null)} />;
+
+  const cards: { key: string; title: string; desc: string; codes: string[]; ready: boolean; onUse?: () => void }[] = [
+    { key: "video-upload", title: "Bulk Video Upload", desc: "Upload and post multiple videos at once.", codes: ["bs"], ready: true, onUse: () => setTool("video") },
+    { key: "image", title: "Bulk Image Upload", desc: "Upload and schedule multiple images at once.", codes: ["fb", "ig", "li", "pin", "tt", "tw", "th", "bs"], ready: true, onUse: () => setTool("image") },
+    { key: "video-creation", title: "Bulk Video Creation", desc: "Create viral 2×2 grid videos in bulk (AI assisted).", codes: [], ready: false },
   ];
   return (
     <div>
       <h1 className={`${h1} mb-[26px]`}>Bulk tools</h1>
       <div className="bulk-grid grid grid-cols-1 gap-[22px] md:grid-cols-2 xl:grid-cols-3">
         {cards.map((c) => (
-          <div key={c.title} className={`std-card px-6 pb-6 pt-[34px] text-center transition-all ${card}`}>
+          <button
+            key={c.title}
+            type="button"
+            onClick={() =>
+              c.ready && c.onUse
+                ? c.onUse()
+                : toast.info("Coming soon", { description: `${c.title} isn't available yet.` })
+            }
+            className={`std-card block w-full px-6 pb-6 pt-[34px] text-center transition-all ${card} ${
+              c.ready ? "cursor-pointer hover:border-[#86EFAC] hover:shadow-glow" : "cursor-default opacity-80"
+            }`}
+          >
             <div className="mb-[18px] flex justify-center gap-1.5 text-[#CBD5E1]">
               <Package className="size-7" strokeWidth={1.6} />
               <Video className="size-7" strokeWidth={1.6} />
             </div>
             <div className="mb-4 flex items-center justify-center gap-2">
               <span className="text-[18px] font-extrabold text-[#0F172A]">{c.title}</span>
-              <span className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-extrabold text-[#64748B]">NEW</span>
+              <span
+                className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold ${
+                  c.ready ? "bg-[#DCFCE7] text-[#16A34A]" : "bg-[#F1F5F9] text-[#64748B]"
+                }`}
+              >
+                {c.ready ? "READY" : "SOON"}
+              </span>
             </div>
             <p className="mb-[18px] text-[13.5px] leading-normal text-[#94A3B8]">{c.desc}</p>
             {c.codes.length > 0 && <PlatformRow codes={c.codes} size={15} color="#CBD5E1" />}
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -178,26 +227,258 @@ function BulkScreen() {
 /* -------------------------------------------------------------------------- */
 /*  Calendar                                                                   */
 /* -------------------------------------------------------------------------- */
-function CalendarScreen() {
+const CAL_STATUS: Record<string, { border: string; bg: string; text: string }> = {
+  queued: { border: "#DBEAFE", bg: "#EFF6FF", text: "#2563EB" },
+  scheduled: { border: "#DBEAFE", bg: "#EFF6FF", text: "#2563EB" },
+  publishing: { border: "#FEF3C7", bg: "#FFFBEB", text: "#B45309" },
+  published: { border: "#DCFCE7", bg: "#F0FDF4", text: "#16A34A" },
+  failed: { border: "#FEE2E2", bg: "#FEF2F2", text: "#DC2626" },
+  canceled: { border: "#F1F5F9", bg: "#F8FAFC", text: "#94A3B8" },
+};
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const CAL_GLYPH: Record<string, string> = {
+  instagram: "ig", twitter: "tw", x: "tw", linkedin: "li", facebook: "fb",
+  youtube: "yt", tiktok: "tt", pinterest: "pin", threads: "th", bluesky: "bs",
+};
+const CAL_PLATFORM_BG: Record<string, string> = {
+  instagram: "linear-gradient(135deg,#E1306C,#F77737)", twitter: "#1D1D1F", x: "#1D1D1F",
+  linkedin: "#0A66C2", facebook: "#1877F2", youtube: "#FF0000", tiktok: "#0F172A",
+  pinterest: "#E60023", threads: "#0F172A", bluesky: "#1185FE",
+};
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+/** "YYYY-MM-DD" in local time (matches the backend note_date). */
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+/** datetime-local string for a day, defaulting to 9:00 AM (or +1h if that's already past today). */
+function presetDateTime(day: Date): string | undefined {
+  const now = new Date();
+  const at = new Date(day);
+  at.setHours(9, 0, 0, 0);
+  if (at.getTime() <= now.getTime()) {
+    if (dayKey(day) === dayKey(now)) at.setTime(now.getTime() + 3600_000);
+    else return undefined; // a past day can't be scheduled
+  }
+  return `${ymd(at)}T${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+}
+
+type CalGroup = {
+  key: string;
+  when: string;
+  content: string;
+  hasMedia: boolean;
+  status: string;
+  platforms: string[];
+  url: string | null;
+};
+
+// Multiple accounts for the same post at the same time collapse into one entry
+// (matching the reference calendar's stacked platform icons + "+N").
+function groupItems(items: CalendarItem[]): CalGroup[] {
+  const rank = (s: string) => (s === "failed" ? 4 : s === "scheduled" || s === "queued" ? 3 : s === "publishing" ? 2 : 1);
+  const m = new Map<string, CalGroup>();
+  for (const it of items) {
+    const k = `${it.post_id}|${it.scheduled_at.slice(0, 16)}`;
+    let g = m.get(k);
+    if (!g) {
+      g = { key: k, when: it.scheduled_at, content: it.content, hasMedia: it.has_media, status: it.status, platforms: [], url: it.url ?? null };
+      m.set(k, g);
+    }
+    if (!g.platforms.includes(it.platform)) g.platforms.push(it.platform);
+    if (rank(it.status) > rank(g.status)) g.status = it.status;
+    if (!g.url && it.url) g.url = it.url;
+  }
+  return Array.from(m.values());
+}
+
+function PlatformDot({ platform }: { platform: string }) {
+  return (
+    <span
+      className="grid size-[18px] shrink-0 place-items-center rounded-full ring-1 ring-white"
+      style={{ background: CAL_PLATFORM_BG[platform] || "#94A3B8" }}
+      title={platform}
+    >
+      <PlatformGlyph code={CAL_GLYPH[platform] || "tw"} size={10} color="#ffffff" />
+    </span>
+  );
+}
+
+function CalendarScreen({ onCompose }: { onCompose: (t: ComposerType, presetDate?: string) => void }) {
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const cells: { date: string; muted: boolean }[] = [
-    { date: "Jun 28", muted: true }, { date: "Jun 29", muted: true }, { date: "Jun 30", muted: true },
-    ...Array.from({ length: 31 }, (_, i) => ({ date: `Jul ${i + 1}`, muted: false })),
-    { date: "Aug 1", muted: true },
-  ];
+  const today = React.useMemo(() => new Date(), []);
+  const [view, setView] = React.useState<"month" | "week">("month");
+  const [cursor, setCursor] = React.useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+  const [platform, setPlatform] = React.useState("all");
+  const [items, setItems] = React.useState<CalendarItem[]>([]);
+  const [notes, setNotes] = React.useState<Record<string, string>>({});
+  const [loading, setLoading] = React.useState(true);
+  // Note editor: which day is open + draft text.
+  const [noteDay, setNoteDay] = React.useState<Date | null>(null);
+  const [noteDraft, setNoteDraft] = React.useState("");
+  const [noteSaving, setNoteSaving] = React.useState(false);
+
+  // Grid: 42 days (month) or 7 days (week), starting on the Sunday on/before the anchor.
+  const gridStart = React.useMemo(() => {
+    const base = view === "month" ? new Date(cursor.getFullYear(), cursor.getMonth(), 1) : cursor;
+    const s = new Date(base);
+    s.setDate(base.getDate() - base.getDay());
+    return s;
+  }, [cursor, view]);
+  const span = view === "month" ? 42 : 7;
+  const gridDays = React.useMemo(
+    () => Array.from({ length: span }, (_, i) => {
+      const d = new Date(gridStart);
+      d.setDate(gridStart.getDate() + i);
+      return d;
+    }),
+    [gridStart, span]
+  );
+
+  const reloadNotes = React.useCallback(() => {
+    const end = new Date(gridStart);
+    end.setDate(gridStart.getDate() + span - 1);
+    scheduleApi
+      .notes(ymd(gridStart), ymd(end))
+      .then((rows) => setNotes(Object.fromEntries(rows.map((n) => [n.note_date, n.content]))))
+      .catch(() => setNotes({}));
+  }, [gridStart, span]);
+
+  React.useEffect(() => {
+    const end = new Date(gridStart);
+    end.setDate(gridStart.getDate() + span);
+    setLoading(true);
+    scheduleApi
+      .calendar(gridStart.toISOString(), end.toISOString())
+      .then(setItems)
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+    reloadNotes();
+  }, [gridStart, span, reloadNotes]);
+
+  function openNote(day: Date) {
+    setNoteDay(day);
+    setNoteDraft(notes[ymd(day)] ?? "");
+  }
+  async function saveNote() {
+    if (!noteDay) return;
+    const key = ymd(noteDay);
+    const text = noteDraft.trim();
+    setNoteSaving(true);
+    try {
+      if (text) {
+        await scheduleApi.upsertNote(key, text);
+        setNotes((n) => ({ ...n, [key]: text }));
+      } else if (notes[key]) {
+        await scheduleApi.deleteNote(key);
+        setNotes((n) => { const c = { ...n }; delete c[key]; return c; });
+      }
+      setNoteDay(null);
+    } catch (e) {
+      toast.error("Couldn't save note", { description: e instanceof ApiError ? e.message : "Please try again." });
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+  async function removeNote() {
+    if (!noteDay) return;
+    const key = ymd(noteDay);
+    setNoteSaving(true);
+    try {
+      await scheduleApi.deleteNote(key);
+      setNotes((n) => { const c = { ...n }; delete c[key]; return c; });
+      setNoteDay(null);
+    } catch {
+      toast.error("Couldn't delete note");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+  function createForDay(day: Date) {
+    onCompose("image", presetDateTime(day));
+  }
+
+  const availablePlatforms = React.useMemo(
+    () => Array.from(new Set(items.map((i) => i.platform))),
+    [items]
+  );
+
+  const byDay = React.useMemo(() => {
+    const filtered = platform === "all" ? items : items.filter((i) => i.platform === platform);
+    const m = new Map<string, CalGroup[]>();
+    for (const g of groupItems(filtered)) {
+      const k = dayKey(new Date(g.when));
+      (m.get(k) ?? m.set(k, []).get(k)!).push(g);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.when.localeCompare(b.when));
+    return m;
+  }, [items, platform]);
+
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const shift = (delta: number) =>
+    setCursor((c) =>
+      view === "month"
+        ? new Date(c.getFullYear(), c.getMonth() + delta, 1)
+        : new Date(c.getFullYear(), c.getMonth(), c.getDate() + delta * 7)
+    );
+
+  const weekEnd = gridDays[6];
+  const label =
+    view === "month"
+      ? `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}`
+      : gridStart.getMonth() === weekEnd.getMonth()
+        ? `${MONTHS[gridStart.getMonth()].slice(0, 3)} ${gridStart.getDate()} – ${weekEnd.getDate()}`
+        : `${MONTHS[gridStart.getMonth()].slice(0, 3)} ${gridStart.getDate()} – ${MONTHS[weekEnd.getMonth()].slice(0, 3)} ${weekEnd.getDate()}`;
+  const maxPerCell = view === "month" ? 3 : 8;
+
   return (
     <div>
       <div className="mb-[22px] flex flex-wrap items-center justify-between gap-3.5">
         <h1 className={h1}>Calendar</h1>
         <div className="flex items-center gap-4">
-          <button className="grid size-8 place-items-center rounded-lg border border-[#E5E7EB] bg-white text-[#334155]"><ChevronLeft className="size-4" /></button>
-          <span className="text-[15px] font-bold text-[#0F172A]">July 2026</span>
-          <button className="grid size-8 place-items-center rounded-lg border border-[#E5E7EB] bg-white text-[#334155]"><ChevronRight className="size-4" /></button>
+          <button onClick={() => shift(-1)} className="grid size-8 place-items-center rounded-lg border border-[#E5E7EB] bg-white text-[#334155] hover:bg-[#F8FAFC]"><ChevronLeft className="size-4" /></button>
+          <span className="min-w-[150px] text-center text-[15px] font-bold text-[#0F172A]">{label}</span>
+          <button onClick={() => shift(1)} className="grid size-8 place-items-center rounded-lg border border-[#E5E7EB] bg-white text-[#334155] hover:bg-[#F8FAFC]"><ChevronRight className="size-4" /></button>
         </div>
-        <div className="flex gap-2">
-          <button className="rounded-[9px] border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#334155]">All Platforms ▾</button>
-          <button className="rounded-[9px] bg-brand-gradient px-3.5 py-2 text-[13px] font-bold text-white">Month</button>
-          <button className="rounded-[9px] border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#334155]">Week</button>
+        <div className="flex items-center gap-2">
+          {loading && <Loader2 className="size-4 animate-spin text-[#94A3B8]" />}
+          <button
+            onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), today.getDate()))}
+            className="rounded-[9px] border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+          >
+            Today
+          </button>
+          <div className="relative">
+            <select
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value)}
+              className="appearance-none rounded-[9px] border border-[#E5E7EB] bg-white py-2 pl-3.5 pr-8 text-[13px] font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+            >
+              <option value="all">All Platforms</option>
+              {availablePlatforms.map((p) => (
+                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+              ))}
+            </select>
+            <ChevronDownIcon />
+          </div>
+          <div className="flex overflow-hidden rounded-[9px] border border-[#E5E7EB]">
+            <button
+              onClick={() => setView("month")}
+              className={"px-3.5 py-2 text-[13px] font-bold " + (view === "month" ? "bg-brand-gradient text-white" : "bg-white text-[#334155]")}
+            >
+              Month
+            </button>
+            <button
+              onClick={() => setView("week")}
+              className={"px-3.5 py-2 text-[13px] font-bold " + (view === "week" ? "bg-brand-gradient text-white" : "bg-white text-[#334155]")}
+            >
+              Week
+            </button>
+          </div>
         </div>
       </div>
       <div className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white">
@@ -207,39 +488,122 @@ function CalendarScreen() {
           ))}
         </div>
         <div className="grid grid-cols-7">
-          {cells.map((c, i) => {
-            const isJul2 = c.date === "Jul 2";
-            const isJul3 = c.date === "Jul 3";
+          {gridDays.map((d, i) => {
+            const inMonth = view === "week" || d.getMonth() === cursor.getMonth();
+            const isToday = dayKey(d) === dayKey(today);
+            const groups = byDay.get(dayKey(d)) ?? [];
             return (
               <div
                 key={i}
-                className="min-h-[96px] border-b border-r border-[#F1F5F9] px-[9px] py-2"
-                style={{ background: isJul3 ? "#F0FDF4" : "#fff" }}
+                className={(view === "week" ? "min-h-[320px] " : "min-h-[108px] ") + "group relative border-b border-r border-[#F1F5F9] px-[9px] py-2"}
+                style={{ background: isToday ? "#F0FDF4" : "#fff" }}
               >
-                <div
-                  className="mb-1.5 text-[12px] font-bold"
-                  style={{ color: c.muted ? "#CBD5E1" : isJul3 ? "#16A34A" : "#64748B" }}
-                >
-                  {c.date}
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[12px] font-bold" style={{ color: !inMonth ? "#CBD5E1" : isToday ? "#16A34A" : "#64748B" }}>
+                    {d.getDate()}{d.getDate() === 1 ? ` ${MONTHS[d.getMonth()].slice(0, 3)}` : ""}
+                  </span>
+                  <span className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                    <button onClick={() => openNote(d)} title="Add note" aria-label="Add note" className="grid size-[22px] place-items-center rounded-md border border-[#FCD34D] bg-[#FEF9C3] text-[#B45309] hover:bg-[#FDE68A]">
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button onClick={() => createForDay(d)} title="Create post for this date" aria-label="Create post for this date" className="grid size-[22px] place-items-center rounded-md border border-[#86EFAC] bg-[#DCFCE7] text-[#16A34A] hover:bg-[#BBF7D0]">
+                      <Plus className="size-3.5" />
+                    </button>
+                  </span>
                 </div>
-                {isJul2 ? (
-                  <>
-                    {["2:20 PM", "2:30 PM"].map((t, j) => (
-                      <div key={t} className={`rounded-[7px] border border-[#DCFCE7] bg-[#F0FDF4] px-[7px] py-[5px] ${j === 0 ? "mb-[5px]" : ""}`}>
-                        <div className="mb-0.5 text-[10px] font-bold text-[#16A34A]">{t}</div>
-                        <div className="truncate text-[10px] text-[#475569]">🚨 Crypto market update…</div>
-                      </div>
-                    ))}
-                  </>
+                {notes[ymd(d)] && (
+                  <button
+                    onClick={() => openNote(d)}
+                    className="mb-[5px] flex w-full items-start gap-1 rounded-[6px] border border-[#FDE68A] bg-[#FEFCE8] px-[6px] py-[4px] text-left text-[10px] text-[#854D0E] hover:bg-[#FEF9C3]"
+                    title={notes[ymd(d)]}
+                  >
+                    <span>📝</span>
+                    <span className={view === "week" ? "" : "truncate"}>{notes[ymd(d)]}</span>
+                  </button>
+                )}
+                {groups.length === 0 ? (
+                  <div className="mt-[14px] text-center text-[11px] text-[#CBD5E1]">No posts</div>
                 ) : (
-                  <div className="mt-[22px] text-center text-[11px] text-[#CBD5E1]">No posts</div>
+                  <>
+                    {groups.slice(0, maxPerCell).map((g) => {
+                      const c = CAL_STATUS[g.status] ?? CAL_STATUS.scheduled;
+                      const inner = (
+                        <>
+                          <div className="mb-1 flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-bold" style={{ color: c.text }}>{fmtTime(g.when)}</span>
+                            <span className="flex items-center">
+                              {g.platforms.slice(0, 3).map((p, idx) => (
+                                <span key={p} className={idx > 0 ? "-ml-1.5" : ""}><PlatformDot platform={p} /></span>
+                              ))}
+                              {g.platforms.length > 3 && <span className="ml-0.5 text-[9px] font-bold text-[#94A3B8]">+{g.platforms.length - 3}</span>}
+                            </span>
+                          </div>
+                          <div className="truncate text-[10.5px] text-[#475569]">{g.hasMedia ? "🖼 " : ""}{g.content || "(no caption)"}</div>
+                        </>
+                      );
+                      return g.url ? (
+                        <a key={g.key} href={g.url} target="_blank" rel="noreferrer" className="mb-[5px] block rounded-[7px] border px-[7px] py-[5px] transition-colors hover:brightness-95" style={{ borderColor: c.border, background: c.bg }}>{inner}</a>
+                      ) : (
+                        <div key={g.key} className="mb-[5px] rounded-[7px] border px-[7px] py-[5px]" style={{ borderColor: c.border, background: c.bg }} title={g.content}>{inner}</div>
+                      );
+                    })}
+                    {groups.length > maxPerCell && <div className="text-[10px] font-semibold text-[#94A3B8]">+{groups.length - maxPerCell} more</div>}
+                  </>
                 )}
               </div>
             );
           })}
         </div>
       </div>
+      <p className="mt-3 text-[12px] text-[#94A3B8]">
+        Posts you scheduled or published, on their dates. Blue = scheduled · green = published · red = failed. Hover a day to add a note or create a post.
+      </p>
+
+      {noteDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !noteSaving && setNoteDay(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative w-full max-w-[420px] rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 text-[16px] font-extrabold text-[#0F172A]">Note</div>
+            <div className="mb-3 text-[13px] text-[#64748B]">
+              {noteDay.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </div>
+            <textarea
+              autoFocus
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Jot a reminder for this day…"
+              rows={4}
+              className="mb-4 w-full resize-y rounded-xl border border-[#E5E7EB] bg-white p-3 text-[14px] text-[#0F172A] outline-none focus:border-[#86EFAC]"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                {notes[ymd(noteDay)] && (
+                  <button onClick={removeNote} disabled={noteSaving} className="rounded-xl border border-[#FEE2E2] bg-white px-3.5 py-2.5 text-[13.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-60">
+                    Delete
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setNoteDay(null)} disabled={noteSaving} className="rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-2.5 text-[13.5px] font-bold text-[#64748B] hover:bg-[#F8FAFC] disabled:opacity-60">
+                  Cancel
+                </button>
+                <button onClick={saveNote} disabled={noteSaving} className="flex items-center gap-2 rounded-xl bg-brand-gradient px-4 py-2.5 text-[13.5px] font-bold text-white disabled:opacity-60">
+                  {noteSaving && <Loader2 className="size-4 animate-spin" />} Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[#94A3B8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -345,20 +709,55 @@ function PostsListScreen({
 /*  Analytics                                                                  */
 /* -------------------------------------------------------------------------- */
 function AnalyticsScreen() {
+  const [data, setData] = React.useState<AnalyticsSummary | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      // Refresh pulls live engagement from the platforms, then returns the summary.
+      setData(await analyticsApi.refresh());
+    } catch {
+      try {
+        setData(await analyticsApi.summary());
+      } catch {
+        setData(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const nf = (n: number) => new Intl.NumberFormat().format(n);
   const metrics = [
-    { label: "Views", value: "0", Icon: Eye },
-    { label: "Likes", value: "0", Icon: Heart },
-    { label: "Comments", value: "0", Icon: MessageCircle },
-    { label: "Avg views / post", value: "0", Icon: TrendingUp },
-    { label: "Engagement rate", value: "0.00%", Icon: Activity },
+    { label: "Posts", value: data ? nf(data.total_posts) : "—", Icon: BadgeCheck },
+    { label: "Likes", value: data ? nf(data.total_likes) : "—", Icon: Heart },
+    { label: "Comments", value: data ? nf(data.total_comments) : "—", Icon: MessageCircle },
+    { label: "Reposts", value: data ? nf(data.total_shares) : "—", Icon: Repeat2 },
+    { label: "Engagement", value: data ? nf(data.total_engagement) : "—", Icon: TrendingUp },
   ];
+  const hasPosts = (data?.total_posts ?? 0) > 0;
+
   return (
     <div>
-      <h1 className={`${h1} mb-[18px]`}>Analytics</h1>
+      <div className="mb-[18px] flex items-center justify-between gap-3">
+        <h1 className={h1}>Analytics</h1>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#64748B] hover:text-[#0F172A] disabled:opacity-60"
+        >
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
       <div className="mb-6 flex gap-[22px] border-b border-[#E5E7EB]">
         <span className="border-b-2 border-[#22C55E] pb-3 text-[14.5px] font-bold text-[#16A34A]">Overview</span>
-        <span className="pb-3 text-[14.5px] font-semibold text-[#94A3B8]">Posts</span>
       </div>
+
       <div className="std-grid mb-[22px] grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         {metrics.map((m) => (
           <div key={m.label} className={`p-5 ${card}`}>
@@ -370,19 +769,55 @@ function AnalyticsScreen() {
           </div>
         ))}
       </div>
+
       <div className={`p-[22px] ${card}`}>
-        <div className="mb-4 text-[15px] font-extrabold text-[#0F172A]">Top Performing Posts</div>
-        <div className="flex items-center gap-3.5 rounded-xl border border-[#EEF2F6] p-3.5">
-          <span className="size-[42px] shrink-0 rounded-[9px]" style={{ background: "linear-gradient(135deg,#E1306C,#F77737)" }} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold text-[#1E293B]">🚨 JUST IN: JAPAN&apos;S METAPLANET NOW HOL…</div>
-            <div className="mt-[3px] text-[12px] text-[#94A3B8]">📷 2/7/2026</div>
-          </div>
-          <div className="flex gap-[18px] text-[13px] font-semibold text-[#94A3B8]">
-            <span>👁 0</span><span>♡ 0</span><span>% 0.00%</span>
-          </div>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-[15px] font-extrabold text-[#0F172A]">Top Performing Posts</span>
+          <span className="text-[12px] text-[#94A3B8]">by likes · comments · reposts</span>
         </div>
+
+        {loading && !data ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-[13.5px] text-[#94A3B8]">
+            <Loader2 className="size-4 animate-spin" /> Pulling live engagement…
+          </div>
+        ) : !hasPosts ? (
+          <div className="py-10 text-center text-[13.5px] text-[#94A3B8]">
+            No published posts yet. Publish a post and its engagement will show up here.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {data!.top_posts.map((p) => {
+              const inner = (
+                <>
+                  <span className="grid size-[42px] shrink-0 place-items-center rounded-[9px] bg-[#1185FE] text-[12px] font-bold text-white">Bsky</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14px] font-semibold text-[#1E293B]">{p.content || "(no caption)"}</div>
+                    <div className="mt-[3px] text-[12px] text-[#94A3B8]">
+                      {p.published_at ? new Date(p.published_at).toLocaleDateString() : ""}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-[18px] text-[13px] font-semibold text-[#64748B]">
+                    <span className="inline-flex items-center gap-1"><Heart className="size-3.5" /> {nf(p.likes)}</span>
+                    <span className="inline-flex items-center gap-1"><MessageCircle className="size-3.5" /> {nf(p.comments)}</span>
+                    <span className="inline-flex items-center gap-1"><Repeat2 className="size-3.5" /> {nf(p.shares)}</span>
+                  </div>
+                </>
+              );
+              return p.url ? (
+                <a key={p.post_id} href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-3.5 rounded-xl border border-[#EEF2F6] p-3.5 transition-colors hover:border-[#BAE6FD] hover:bg-[#F8FBFF]">
+                  {inner}
+                </a>
+              ) : (
+                <div key={p.post_id} className="flex items-center gap-3.5 rounded-xl border border-[#EEF2F6] p-3.5">{inner}</div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      <p className="mt-3 text-[12px] text-[#94A3B8]">
+        Metrics are pulled live from Bluesky (likes, replies, reposts). Bluesky doesn&apos;t expose view/impression counts.
+      </p>
     </div>
   );
 }
@@ -406,6 +841,8 @@ function ConnectionsScreen() {
   const [accounts, setAccounts] = React.useState<SocialAccount[]>([]);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [bsky, setBsky] = React.useState({ open: false, id: "", pw: "", loading: false });
+  const [confirmDc, setConfirmDc] = React.useState<SocialAccount | null>(null);
+  const [dcBusy, setDcBusy] = React.useState(false);
 
   const load = React.useCallback(() => {
     scheduleApi.accounts().then(setAccounts).catch(() => setAccounts([]));
@@ -447,18 +884,57 @@ function ConnectionsScreen() {
     }
   }
 
-  async function disconnect(id: string) {
+  async function doDisconnect() {
+    if (!confirmDc) return;
+    setDcBusy(true);
     try {
-      await scheduleApi.disconnect(id);
+      await scheduleApi.disconnect(confirmDc.id);
+      toast.success("Disconnected", { description: `${confirmDc.handle} was removed.` });
+      setConfirmDc(null);
       load();
-    } catch {
-      toast.error("Couldn't disconnect");
+    } catch (e) {
+      toast.error("Couldn't disconnect", {
+        description: e instanceof ApiError ? e.message : "Please try again.",
+      });
+    } finally {
+      setDcBusy(false);
     }
   }
 
   return (
     <div>
       <h1 className={`${h1} mb-6`}>Connected Accounts</h1>
+
+      {confirmDc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !dcBusy && setConfirmDc(null)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 text-[18px] font-extrabold text-[#0F172A]">Disconnect account?</div>
+            <p className="mb-5 text-[13.5px] leading-relaxed text-[#64748B]">
+              <span className="font-semibold text-[#334155]">{confirmDc.handle}</span> will be removed. You won&apos;t
+              be able to post to it until you reconnect. Your existing posts stay untouched.
+            </p>
+            <div className="flex justify-end gap-2.5">
+              <button
+                onClick={() => setConfirmDc(null)}
+                disabled={dcBusy}
+                className="rounded-[10px] border border-[#E5E7EB] bg-white px-4 py-2.5 text-[14px] font-semibold text-[#64748B] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doDisconnect}
+                disabled={dcBusy}
+                className="flex items-center gap-2 rounded-[10px] bg-[#EF4444] px-5 py-2.5 text-[14px] font-bold text-white hover:bg-[#DC2626] disabled:opacity-60"
+              >
+                {dcBusy && <Loader2 className="size-4 animate-spin" />} Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {bsky.open && (
         <div
@@ -528,13 +1004,17 @@ function ConnectionsScreen() {
                 </button>
                 <div className="flex flex-wrap gap-2.5">
                   {mine.map((a) => (
-                    <span key={a.id} className="inline-flex items-center gap-[7px] rounded-full bg-[#F1F5F9] py-1 pl-1 pr-2.5">
+                    <span key={a.id} className="inline-flex items-center gap-[7px] rounded-full bg-[#F1F5F9] py-1 pl-1 pr-1.5">
                       <span className="grid size-[22px] place-items-center rounded-full bg-[#CBD5E1] text-[9px] font-bold text-white">
                         {a.handle.slice(0, 2).toUpperCase()}
                       </span>
                       <span className="text-[12.5px] font-semibold text-[#334155]">{a.handle}</span>
-                      <button onClick={() => disconnect(a.id)} className="text-[13px] text-[#EF4444]" aria-label="Disconnect">
-                        ×
+                      <button
+                        onClick={() => setConfirmDc(a)}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEE2E2]"
+                        aria-label={`Disconnect ${a.handle}`}
+                      >
+                        <X className="size-3.5" strokeWidth={2.5} /> Disconnect
                       </button>
                     </span>
                   ))}
@@ -689,7 +1169,7 @@ export function DashboardScreen({
   active: ScreenKey;
   user: User;
   onNavigate: (k: ScreenKey) => void;
-  onCompose: (t: ComposerType) => void;
+  onCompose: (t: ComposerType, presetDate?: string) => void;
 }) {
   switch (active) {
     case "create":
@@ -699,7 +1179,7 @@ export function DashboardScreen({
     case "bulk":
       return <BulkScreen />;
     case "calendar":
-      return <CalendarScreen />;
+      return <CalendarScreen onCompose={onCompose} />;
     case "all":
       return <PostsListScreen title="All Posts" emptyTitle="No posts yet" emptySub="Create your first post to see it here." onNavigate={onNavigate} />;
     case "posted":

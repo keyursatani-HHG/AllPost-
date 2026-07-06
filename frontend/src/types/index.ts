@@ -66,3 +66,46 @@ export interface Page<T> {
   items: T[];
   meta: { page: number; page_size: number; total: number; total_pages: number };
 }
+
+export interface CalendarItem {
+  id: string;
+  post_id: string;
+  scheduled_at: string;
+  published_at?: string | null;
+  status: PostStatus | "queued" | "canceled";
+  content: string;
+  platform: string;
+  handle: string;
+  has_media: boolean;
+  url?: string | null;
+}
+
+export interface CalendarNote {
+  id: string;
+  note_date: string; // YYYY-MM-DD
+  content: string;
+}
+
+export interface TopPost {
+  post_id: string;
+  content: string;
+  likes: number;
+  comments: number;
+  shares: number;
+  engagement: number;
+  published_at?: string | null;
+  url?: string | null;
+}
+
+export interface AnalyticsSummary {
+  total_posts: number;
+  total_impressions: number;
+  total_reach: number;
+  total_engagement: number;
+  total_likes: number;
+  total_comments: number;
+  total_shares: number;
+  average_engagement_rate: number;
+  by_platform: { platform: string; impressions: number; reach: number; engagement: number }[];
+  top_posts: TopPost[];
+}
