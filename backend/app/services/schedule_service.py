@@ -17,7 +17,7 @@ from app.models.social_account import SocialAccount
 from app.models.user import User
 from app.schemas.common import PaginationParams
 from app.schemas.schedule import ScheduleCreate, SocialAccountConnect
-from app.services import bluesky
+from app.services import bluesky, linkedin, mastodon
 
 UPLOAD_DIR = pathlib.Path("uploads")
 _MIME = {
@@ -276,6 +276,86 @@ async def connect_bluesky(
     return acc
 
 
+async def connect_mastodon(
+    db: AsyncSession, user: User, instance_url: str, access_token: str
+) -> SocialAccount:
+    """Validate the access token against a Mastodon instance, then save/update the account."""
+    account = await mastodon.verify(instance_url, access_token)
+    host = mastodon.instance_host(instance_url)
+    handle = f"{account['username']}@{host}"  # publish derives the instance from this
+    external_id = str(account["id"])
+    display = account.get("display_name") or account["username"]
+
+    result = await db.execute(
+        select(SocialAccount).where(
+            SocialAccount.user_id == user.id,
+            SocialAccount.platform == SocialPlatform.mastodon,
+            SocialAccount.external_id == external_id,
+        )
+    )
+    acc = result.scalar_one_or_none()
+    if acc is not None:
+        acc.access_token = access_token
+        acc.handle = handle
+        acc.display_name = display
+        acc.avatar_url = account.get("avatar")
+        acc.is_active = True
+    else:
+        acc = SocialAccount(
+            user_id=user.id,
+            platform=SocialPlatform.mastodon,
+            external_id=external_id,
+            handle=handle,
+            display_name=display,
+            avatar_url=account.get("avatar"),
+            access_token=access_token,  # encrypt at rest in production
+        )
+        db.add(acc)
+    await db.commit()
+    await db.refresh(acc)
+    return acc
+
+
+async def connect_linkedin(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    sub: str,
+    name: str,
+    access_token: str,
+    avatar: str | None = None,
+) -> SocialAccount:
+    """Save/update a LinkedIn account after the OAuth callback."""
+    result = await db.execute(
+        select(SocialAccount).where(
+            SocialAccount.user_id == user_id,
+            SocialAccount.platform == SocialPlatform.linkedin,
+            SocialAccount.external_id == sub,
+        )
+    )
+    acc = result.scalar_one_or_none()
+    handle = (name or "LinkedIn")[:120]
+    if acc is not None:
+        acc.access_token = access_token
+        acc.handle = handle
+        acc.display_name = name
+        acc.avatar_url = avatar
+        acc.is_active = True
+    else:
+        acc = SocialAccount(
+            user_id=user_id,
+            platform=SocialPlatform.linkedin,
+            external_id=sub,
+            handle=handle,
+            display_name=name,
+            avatar_url=avatar,
+            access_token=access_token,  # encrypt at rest in production
+        )
+        db.add(acc)
+    await db.commit()
+    await db.refresh(acc)
+    return acc
+
+
 def _load_post_media(
     post: Post,
 ) -> tuple[list[tuple[bytes, str]], tuple[bytes, str] | None, tuple[int, int] | None]:
@@ -299,18 +379,34 @@ def _load_post_media(
 
 
 async def publish_to_account(post: Post, account: SocialAccount) -> str:
-    """Publish `post` to one `account`; return the external post URI or raise.
+    """Publish `post` to one `account`; return the external post URL/URI or raise.
 
     Shared by immediate publish and the scheduled-post worker.
     """
-    if account.platform != SocialPlatform.bluesky or not account.access_token:
+    if not account.access_token:
         raise errors.bad_request(
             "Live publishing isn't available for this platform yet.", "platform_unsupported"
         )
     images, video, aspect = _load_post_media(post)
-    return await bluesky.publish(
-        account.handle, account.access_token, post.content, images,
-        video=video, aspect_ratio=aspect,
+
+    if account.platform == SocialPlatform.bluesky:
+        return await bluesky.publish(
+            account.handle, account.access_token, post.content, images,
+            video=video, aspect_ratio=aspect,
+        )
+    if account.platform == SocialPlatform.mastodon:
+        # Handle is stored as "username@host"; the instance is https://<host>.
+        instance = f"https://{account.handle.split('@')[-1]}"
+        return await mastodon.publish(
+            instance, account.access_token, post.content, images, video=video
+        )
+    if account.platform == SocialPlatform.linkedin:
+        # LinkedIn supports text + images (video is a separate upload flow, not yet wired).
+        return await linkedin.publish(
+            account.access_token, account.external_id, post.content, images
+        )
+    raise errors.bad_request(
+        "Live publishing isn't available for this platform yet.", "platform_unsupported"
     )
 
 
@@ -331,8 +427,6 @@ async def publish_now(
     if not accounts:
         raise errors.bad_request("No valid accounts selected", "invalid_accounts")
 
-    images, video, video_aspect = _load_post_media(post)
-
     outcomes: list[dict] = []
     published_any = False
     for acc in accounts:
@@ -341,35 +435,33 @@ async def publish_now(
             social_account_id=acc.id,
             scheduled_at=datetime.now(timezone.utc),
         )
-        if acc.platform == SocialPlatform.bluesky and acc.access_token:
-            try:
-                uri = await bluesky.publish(
-                    acc.handle, acc.access_token, post.content, images,
-                    video=video, aspect_ratio=video_aspect,
-                )
-                sp.status = ScheduleStatus.published
-                sp.published_at = datetime.now(timezone.utc)
-                sp.external_post_id = uri
-                published_any = True
+        try:
+            ext = await publish_to_account(post, acc)
+            sp.status = ScheduleStatus.published
+            sp.published_at = datetime.now(timezone.utc)
+            sp.external_post_id = ext
+            published_any = True
+            url = bluesky.post_url(ext, acc.handle) if acc.platform == SocialPlatform.bluesky else ext
+            outcomes.append({
+                "account_id": acc.id, "platform": acc.platform.value,
+                "status": "published", "url": url,
+            })
+        except Exception as exc:  # noqa: BLE001 - report per-account
+            detail = getattr(exc, "detail", str(exc))
+            if getattr(exc, "code", "") == "platform_unsupported":
+                sp.status = ScheduleStatus.queued
                 outcomes.append({
-                    "account_id": acc.id, "platform": "bluesky",
-                    "status": "published", "url": bluesky.post_url(uri, acc.handle),
+                    "account_id": acc.id, "platform": acc.platform.value,
+                    "status": "queued",
+                    "error": "Live publishing isn't wired for this platform yet.",
                 })
-            except Exception as exc:  # noqa: BLE001 - report per-account
-                detail = getattr(exc, "detail", str(exc))
+            else:
                 sp.status = ScheduleStatus.failed
                 sp.error_message = str(detail)[:500]
                 outcomes.append({
-                    "account_id": acc.id, "platform": "bluesky",
+                    "account_id": acc.id, "platform": acc.platform.value,
                     "status": "failed", "error": str(detail),
                 })
-        else:
-            sp.status = ScheduleStatus.queued
-            outcomes.append({
-                "account_id": acc.id, "platform": acc.platform.value,
-                "status": "queued",
-                "error": "Live publishing isn't wired for this platform yet.",
-            })
         db.add(sp)
 
     post.status = PostStatus.published if published_any else PostStatus.scheduled

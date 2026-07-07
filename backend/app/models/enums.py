@@ -21,6 +21,7 @@ class SocialPlatform(str, enum.Enum):
     pinterest = "pinterest"
     threads = "threads"
     bluesky = "bluesky"
+    mastodon = "mastodon"
 
 
 class PostStatus(str, enum.Enum):

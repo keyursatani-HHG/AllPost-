@@ -210,6 +210,8 @@ export const scheduleApi = {
   }) => request("/schedule", { method: "POST", body: input }),
   connectBluesky: (input: { identifier: string; app_password: string }) =>
     request<SocialAccount>("/schedule/accounts/bluesky", { method: "POST", body: input }),
+  connectMastodon: (input: { instance_url: string; access_token: string }) =>
+    request<SocialAccount>("/schedule/accounts/mastodon", { method: "POST", body: input }),
   calendar: (startISO: string, endISO: string) =>
     request<CalendarItem[]>(
       `/schedule/calendar?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`

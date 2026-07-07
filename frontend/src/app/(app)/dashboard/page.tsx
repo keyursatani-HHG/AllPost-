@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Menu } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -21,6 +22,23 @@ export default function DashboardPage() {
   React.useEffect(() => {
     if (status === "unauthenticated") router.replace("/login?from=/dashboard");
   }, [status, router]);
+
+  // Surface the result of the LinkedIn OAuth redirect (?linkedin=...).
+  React.useEffect(() => {
+    const li = new URLSearchParams(window.location.search).get("linkedin");
+    if (!li) return;
+    const M: Record<string, { ok: boolean; msg: string; desc?: string }> = {
+      connected: { ok: true, msg: "LinkedIn connected", desc: "You can now post to it from the composer." },
+      not_configured: { ok: false, msg: "LinkedIn isn't set up yet", desc: "The LinkedIn app credentials aren't configured on the server." },
+      auth_required: { ok: false, msg: "Please sign in again", desc: "Your session expired before connecting." },
+      state: { ok: false, msg: "Couldn't connect LinkedIn", desc: "Security check failed — please try again." },
+      failed: { ok: false, msg: "Couldn't connect LinkedIn", desc: "Authorization failed — please try again." },
+    };
+    const m = M[li];
+    if (m) (m.ok ? toast.success : toast.error)(m.msg, { description: m.desc });
+    if (li === "connected") setActive("connections");
+    window.history.replaceState({}, "", "/dashboard");
+  }, []);
 
   const navigate = React.useCallback((k: ScreenKey) => {
     setActive(k);

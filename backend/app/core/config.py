@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
 
+    # --- LinkedIn OAuth (for connecting a LinkedIn account to post to) ---
+    LINKEDIN_CLIENT_ID: str | None = None
+    LINKEDIN_CLIENT_SECRET: str | None = None
+    LINKEDIN_REDIRECT_URI: str = "http://localhost:8000/api/v1/schedule/accounts/linkedin/callback"
+
     # --- AWS S3 ---
     AWS_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: str | None = None
@@ -89,6 +94,10 @@ class Settings(BaseSettings):
     @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET)
+
+    @property
+    def linkedin_oauth_enabled(self) -> bool:
+        return bool(self.LINKEDIN_CLIENT_ID and self.LINKEDIN_CLIENT_SECRET)
 
     @property
     def refresh_token_expire_seconds(self) -> int:

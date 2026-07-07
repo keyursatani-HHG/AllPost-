@@ -59,6 +59,11 @@ class BlueskyConnect(BaseModel):
     app_password: str = Field(min_length=1, max_length=128)
 
 
+class MastodonConnect(BaseModel):
+    instance_url: str = Field(min_length=3, max_length=253)  # e.g. mastodon.social
+    access_token: str = Field(min_length=1, max_length=2048)
+
+
 class PublishRequest(BaseModel):
     post_id: uuid.UUID
     social_account_ids: list[uuid.UUID] = Field(min_length=1)

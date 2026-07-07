@@ -26,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 
-import { postsApi, scheduleApi, analyticsApi, ApiError } from "@/lib/api";
+import { postsApi, scheduleApi, analyticsApi, ApiError, API_URL } from "@/lib/api";
 import type { AnalyticsSummary, CalendarItem, Post, PostStatus, SocialAccount } from "@/types";
 import { PlatformGlyph, PlatformRow } from "@/components/dashboard/icons";
 import type { ScreenKey } from "@/components/dashboard/sidebar";
@@ -834,6 +834,7 @@ const CONNECT_PLATFORMS = [
   { name: "TikTok", platform: "tiktok", code: "tt", bg: "#0F172A" },
   { name: "Facebook", platform: "facebook", code: "fb", bg: "#1877F2" },
   { name: "Bluesky", platform: "bluesky", code: "bs", bg: "#1185FE" },
+  { name: "Mastodon", platform: "mastodon", code: "ma", bg: "#6364FF" },
   { name: "Threads", platform: "threads", code: "th", bg: "#0F172A" },
 ];
 
@@ -841,6 +842,7 @@ function ConnectionsScreen() {
   const [accounts, setAccounts] = React.useState<SocialAccount[]>([]);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [bsky, setBsky] = React.useState({ open: false, id: "", pw: "", loading: false });
+  const [masto, setMasto] = React.useState({ open: false, instance: "", token: "", loading: false });
   const [confirmDc, setConfirmDc] = React.useState<SocialAccount | null>(null);
   const [dcBusy, setDcBusy] = React.useState(false);
 
@@ -865,9 +867,34 @@ function ConnectionsScreen() {
     }
   }
 
+  async function submitMastodon() {
+    if (!masto.instance.trim() || !masto.token.trim()) return;
+    setMasto((s) => ({ ...s, loading: true }));
+    try {
+      await scheduleApi.connectMastodon({ instance_url: masto.instance.trim(), access_token: masto.token.trim() });
+      toast.success("Mastodon connected", { description: "You can now post to it from the composer." });
+      setMasto({ open: false, instance: "", token: "", loading: false });
+      load();
+    } catch (e) {
+      toast.error("Couldn't connect Mastodon", {
+        description: e instanceof ApiError ? e.message : "Check the instance URL and access token.",
+      });
+      setMasto((s) => ({ ...s, loading: false }));
+    }
+  }
+
   async function connect(platform: string, name: string) {
     if (platform === "bluesky") {
       setBsky({ open: true, id: "", pw: "", loading: false });
+      return;
+    }
+    if (platform === "mastodon") {
+      setMasto({ open: true, instance: "", token: "", loading: false });
+      return;
+    }
+    if (platform === "linkedin") {
+      // OAuth: full-page redirect to the backend, which sends the user to LinkedIn.
+      window.location.href = `${API_URL}/schedule/accounts/linkedin/login`;
       return;
     }
     const handle = window.prompt(`Enter the @handle to connect for ${name}:`)?.trim();
@@ -980,6 +1007,57 @@ function ConnectionsScreen() {
                 className="rounded-[10px] bg-brand-gradient px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-60"
               >
                 {bsky.loading ? "Connecting…" : "Connect"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {masto.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setMasto((s) => ({ ...s, open: false }))}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center gap-2.5">
+              <span className="grid size-9 place-items-center rounded-lg" style={{ background: "#6364FF" }}>
+                <PlatformGlyph code="ma" size={18} color="#fff" />
+              </span>
+              <span className="text-[18px] font-extrabold text-[#0F172A]">Connect Mastodon</span>
+            </div>
+            <p className="mb-4 text-[13px] leading-relaxed text-[#64748B]">
+              On your Mastodon instance go to <span className="font-semibold text-[#334155]">Preferences →
+              Development → New application</span> (scopes: <span className="font-semibold text-[#334155]">write</span>),
+              then paste the access token here.
+            </p>
+            <label className="mb-1 block text-[13px] font-semibold text-[#334155]">Instance URL</label>
+            <input
+              value={masto.instance}
+              onChange={(e) => setMasto((s) => ({ ...s, instance: e.target.value }))}
+              placeholder="mastodon.social"
+              className="mb-3 w-full rounded-[10px] border border-[#E2E8F0] px-3.5 py-2.5 text-[14px] outline-none focus:border-[#6364FF]"
+            />
+            <label className="mb-1 block text-[13px] font-semibold text-[#334155]">Access token</label>
+            <input
+              type="password"
+              value={masto.token}
+              onChange={(e) => setMasto((s) => ({ ...s, token: e.target.value }))}
+              placeholder="paste your access token"
+              className="mb-5 w-full rounded-[10px] border border-[#E2E8F0] px-3.5 py-2.5 text-[14px] outline-none focus:border-[#6364FF]"
+            />
+            <div className="flex justify-end gap-2.5">
+              <button
+                onClick={() => setMasto((s) => ({ ...s, open: false }))}
+                className="rounded-[10px] border border-[#E5E7EB] bg-white px-4 py-2.5 text-[14px] font-semibold text-[#64748B]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitMastodon}
+                disabled={masto.loading}
+                className="rounded-[10px] bg-brand-gradient px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-60"
+              >
+                {masto.loading ? "Connecting…" : "Connect"}
               </button>
             </div>
           </div>
